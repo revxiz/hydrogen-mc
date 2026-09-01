@@ -1,0 +1,80 @@
+// Shared configuration for every Minecraft branch subproject.
+// Each branch sets ext.mc_version / ext.java_release / ext.fabric_api /
+// ext.mc_range / ext.group_dir before applying this file.
+
+apply plugin: 'maven-publish'
+
+base {
+	archivesName = "${rootProject.mod_id}-mc${project.ext.mc_version}"
+}
+
+repositories {
+	mavenCentral()
+}
+
+// Layered source sets:
+//   mcshared  - no net.minecraft imports, identical everywhere
+//   mccommon  - Minecraft APIs that are identical across all four branches
+//   group_dir - mclegacy (GL render targets) or mcmodern (Blaze3D GpuDevice)
+//   src/main  - the remaining per-version differences
+sourceSets.main.java.srcDir rootProject.file('mcshared/java')
+sourceSets.main.java.srcDir rootProject.file('mccommon/java')
+sourceSets.main.java.srcDir rootProject.file("${project.ext.group_dir}/java")
+sourceSets.main.resources.srcDir rootProject.file('mcshared/resources')
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.ext.mc_version}"
+	implementation project(':core')
+}
+
+processResources {
+	inputs.property 'version', project.version
+	inputs.property 'mc_range', project.ext.mc_range
+	inputs.property 'java_release', project.ext.java_release
+	inputs.property 'loader_range', project.ext.loader_range
+
+	filesMatching('fabric.mod.json') {
+		expand version: project.version,
+				mc_range: project.ext.mc_range,
+				java_release: project.ext.java_release,
+				loader_range: project.ext.loader_range
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.release = project.ext.java_release
+	options.encoding = 'UTF-8'
+}
+
+// Fold the shared core classes into the mod jar so nothing extra is downloaded.
+jar {
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from project(':core').sourceSets.main.output
+	from(rootProject.file('LICENSE')) { rename { "${it}_${rootProject.mod_id}" } }
+}
+
+// Published to GitHub Packages by the release workflow. Skipped locally,
+// where the credentials are absent.
+publishing {
+	publications {
+		create('mavenJava', MavenPublication) {
+			artifactId = "${rootProject.mod_id}-mc${project.ext.mc_version}"
+			from components.java
+		}
+	}
+
+	repositories {
+		def slug = System.getenv('GITHUB_REPOSITORY')
+
+		if (slug) {
+			maven {
+				name = 'GitHubPackages'
+				url = "https://maven.pkg.github.com/${slug}"
+				credentials {
+					username = System.getenv('GITHUB_ACTOR')
+					password = System.getenv('GITHUB_TOKEN')
+				}
+			}
+		}
+	}
+}
