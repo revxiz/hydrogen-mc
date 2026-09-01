@@ -1,0 +1,20 @@
+plugins {
+	// 26.x ships unobfuscated, so the non-remapping Loom variant is used.
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+ext {
+	mc_version = '26.2'
+	java_release = 25
+	fabric_api = '0.159.0+26.2'
+	mc_range = '>=26.1'
+	group_dir = 'mcmodern'
+	loader_range = '>=0.19.3'
+}
+
+apply from: rootProject.file('gradle/branch.gradle')
+
+dependencies {
+	implementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.ext.fabric_api}"
+}
