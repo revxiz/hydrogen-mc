@@ -12,7 +12,7 @@
 	},
 	"license": "MIT",
 	"icon": "assets/hydrogen/icon.png",
-	"environment": "client",
+	"environment": "*",
 	"entrypoints": {
 		"preLaunch": [
 			"dev.hydrogen.mc.HydrogenPreLaunch"
@@ -22,6 +22,7 @@
 		]
 	},
 	"mixins": [
+		"hydrogen.mixins.json",
 		{
 			"config": "hydrogen.client.mixins.json",
 			"environment": "client"
