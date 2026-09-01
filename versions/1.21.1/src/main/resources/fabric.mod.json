@@ -1,0 +1,35 @@
+{
+	"schemaVersion": 1,
+	"id": "hydrogen",
+	"version": "${version}",
+	"name": "Hydrogen",
+	"description": "Hardware-aware CPU governance, adaptive VRAM and render scaling, and motion-aware chunk prioritisation. Every threshold is measured on your machine at runtime.",
+	"authors": [
+		"Hydrogen contributors"
+	],
+	"contact": {
+		"sources": "https://github.com/revxiz/hydrogen-mc"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"preLaunch": [
+			"dev.hydrogen.mc.HydrogenPreLaunch"
+		],
+		"client": [
+			"dev.hydrogen.mc.HydrogenClient"
+		]
+	},
+	"mixins": [
+		{
+			"config": "hydrogen.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": "${loader_range}",
+		"minecraft": "${mc_range}",
+		"java": ">=${java_release}",
+		"fabric-api": "*"
+	}
+}

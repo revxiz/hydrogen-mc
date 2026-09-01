@@ -1,0 +1,20 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+ext {
+	mc_version = '1.21.1'
+	java_release = 21
+	fabric_api = '0.116.16+1.21.1'
+	mc_range = '>=1.21 <1.21.2'
+	group_dir = 'mclegacy'
+	loader_range = '>=0.16.0'
+}
+
+apply from: rootProject.file('gradle/branch.gradle')
+
+dependencies {
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${rootProject.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.ext.fabric_api}"
+}
