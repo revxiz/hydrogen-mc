@@ -1,0 +1,19 @@
+plugins {
+	id 'java-library'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	// Minecraft already ships both of these; never bundled.
+	compileOnly 'org.slf4j:slf4j-api:2.0.9'
+	compileOnly 'org.jetbrains:annotations:24.1.0'
+}
+
+// Java 17 so the 1.20.x branch can consume it.
+tasks.withType(JavaCompile).configureEach {
+	options.release = 17
+	options.encoding = 'UTF-8'
+}

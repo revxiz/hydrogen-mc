@@ -1,0 +1,21 @@
+plugins {
+	id 'base'
+}
+
+allprojects {
+	group = project.maven_group
+	version = project.mod_version
+}
+
+// Collects every branch jar into build/dist for release.
+tasks.register('collectJars', Copy) {
+	subprojects.findAll { it.name.startsWith('mc') }.each { p ->
+		dependsOn "${p.path}:build"
+		from(p.layout.buildDirectory.dir('libs')) {
+			include '*.jar'
+			exclude '*-sources.jar'
+			exclude '*-dev.jar'
+		}
+	}
+	into layout.buildDirectory.dir('dist')
+}

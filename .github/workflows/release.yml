@@ -1,0 +1,57 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish, for example v1.0.0'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build all branches
+        run: ./gradlew collectJars --no-daemon
+
+      - name: Publish to GitHub Packages
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --no-daemon
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: Hydrogen ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: build/dist/*.jar
+          body: |
+            Built by CI from this commit. One jar per Minecraft branch.
+
+            | Jar | Minecraft | Java | Fabric Loader |
+            |---|---|---|---|
+            | `hydrogen-mc1.20.1` | 1.20 - 1.20.6 | 17+ | 0.16.0+ |
+            | `hydrogen-mc1.21.1` | 1.21 - 1.21.1 | 21+ | 0.16.0+ |
+            | `hydrogen-mc1.21.11` | 1.21.9 - 1.21.11 | 21+ | 0.16.0+ |
+            | `hydrogen-mc26.2` | 26.1+ | 25+ | 0.19.3+ |
+
+            Requires Fabric API. Client side only.
