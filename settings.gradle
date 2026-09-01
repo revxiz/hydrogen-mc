@@ -1,0 +1,19 @@
+pluginManagement {
+	repositories {
+		maven { name = 'Fabric'; url = 'https://maven.fabricmc.net/' }
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+rootProject.name = 'hydrogen'
+
+include 'core'
+
+// One Loom subproject per supported Minecraft branch.
+def branches = ['1.20.1', '1.21.1', '1.21.11', '26.2']
+branches.each { b ->
+	def name = 'mc' + b.replace('.', '_')
+	include name
+	project(":$name").projectDir = file("versions/$b")
+}
