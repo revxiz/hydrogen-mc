@@ -12,7 +12,10 @@ import dev.hydrogen.core.frame.FrameTimeline;
 import dev.hydrogen.core.gc.GcCoordinator;
 import dev.hydrogen.core.gpu.EvictionController;
 import dev.hydrogen.core.gpu.ResolutionController;
+import dev.hydrogen.core.audio.SoundGate;
 import dev.hydrogen.core.gpu.VramSnapshot;
+import dev.hydrogen.core.sim.AiThrottle;
+import dev.hydrogen.core.sim.HopperThrottle;
 import dev.hydrogen.core.hw.Budget;
 import dev.hydrogen.core.hw.DisplayInfo;
 import dev.hydrogen.core.hw.GpuInfo;
@@ -44,6 +47,9 @@ public final class Hydrogen {
 	private final EvictionController eviction;
 	private final SubPixelCuller culler;
 	private final ConePriority cone;
+	private final SoundGate soundGate;
+	private final AiThrottle aiThrottle;
+	private final HopperThrottle hopperThrottle;
 
 	private volatile VramSnapshot vram = VramSnapshot.UNKNOWN;
 	private volatile FrameStats stats = FrameStats.EMPTY;
@@ -65,6 +71,9 @@ public final class Hydrogen {
 		this.eviction = new EvictionController(config, budget);
 		this.culler = new SubPixelCuller(config, budget);
 		this.cone = new ConePriority(config, budget);
+		this.soundGate = new SoundGate(config, budget);
+		this.aiThrottle = new AiThrottle(config);
+		this.hopperThrottle = new HopperThrottle(config);
 	}
 
 	public static Hydrogen boot(Path configFile, NativePlatform platform) {
@@ -272,6 +281,18 @@ public final class Hydrogen {
 
 	public ConePriority cone() {
 		return cone;
+	}
+
+	public SoundGate soundGate() {
+		return soundGate;
+	}
+
+	public AiThrottle aiThrottle() {
+		return aiThrottle;
+	}
+
+	public HopperThrottle hopperThrottle() {
+		return hopperThrottle;
 	}
 
 	public VramSnapshot vram() {

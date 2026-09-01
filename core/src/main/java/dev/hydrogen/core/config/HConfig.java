@@ -93,6 +93,33 @@ public final class HConfig {
 
 		def("compat.disableDrsOnVulkan", "true",
 				"Skip framebuffer scaling when a Vulkan backend is active.");
+
+		// Audio: priority and distance culling for the OpenAL channel pool.
+		def("audio.enabled", "true",
+				"Protect gameplay sounds when the sound pool saturates.");
+		def("audio.poolSize", "247", "Concurrent channels the engine allows.");
+		def("audio.pressureAt", "0.75",
+				"Fraction of the pool in use before culling starts. Nothing is culled below this.");
+		def("audio.cullDistance", AUTO, "auto = derived from render distance.");
+
+		// Rendering: block entity and particle culling.
+		def("cull.blockEntities.enabled", "true",
+				"Apply the sub-pixel size test to block entity renderers too.");
+		def("particle.cullPhysics", "true",
+				"Skip collision and movement for particles the camera cannot see.");
+		def("particle.cullBehindOnly", "true",
+				"Only cull particles behind the camera. False also culls distant off-screen ones.");
+		def("particle.minCullDistance", AUTO, "auto = derived from render distance.");
+
+		// Simulation. Both change behaviour slightly, so both are opt-in.
+		def("ai.throttle.enabled", "false",
+				"Run passive mob AI one tick in N when no player is near. Changes mob behaviour.");
+		def("ai.throttle.distance", "48", "Player distance beyond which passive AI is thinned.");
+		def("ai.throttle.interval", "4", "Run AI one tick in this many. 1 would be no throttling.");
+
+		def("hopper.throttle.enabled", "false",
+				"Thin the pickup scan of empty hoppers. Adds up to interval ticks of pickup delay.");
+		def("hopper.throttle.interval", "4", "Scan one tick in this many while idle.");
 	}
 
 	private static void def(String k, String v, String note) {

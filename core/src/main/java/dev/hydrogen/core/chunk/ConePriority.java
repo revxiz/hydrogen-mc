@@ -148,6 +148,19 @@ public final class ConePriority {
 		return true;
 	}
 
+	/** Squared distance from the camera. Used by audio and particle culling. */
+	public double distanceSqTo(double x, double y, double z) {
+		double dx = x - camX;
+		double dy = y - camY;
+		double dz = z - camZ;
+		return dx * dx + dy * dy + dz * dz;
+	}
+
+	/** True when a point sits behind the camera plane. */
+	public boolean behindCamera(double x, double y, double z) {
+		return (x - camX) * lookX + (y - camY) * lookY + (z - camZ) * lookZ < 0.0D;
+	}
+
 	public long deferredCount() {
 		return deferred;
 	}

@@ -10,6 +10,8 @@ your actual game for five seconds and works out its own thresholds from what it
 measured. A 4K 60Hz rig and a 1080p 240Hz rig get completely different settings
 without anyone touching a config file.
 
+Client side only. Fabric.
+
 ## Download
 
 | Jar | Minecraft | Java | Fabric Loader |
@@ -114,9 +116,52 @@ Mojang wrote them. On older versions, distant sections behind you also get their
 rebuild postponed during bad frames, and always replayed once things recover.
 Nothing is silently dropped.
 
-## The five second benchmark
+### It protects your sound pool
 
-The first time you load a world, Hydrogen throws away one second of loading
+Minecraft's audio backend has 247 channels. Once they're full, every new sound is
+dropped, and vanilla has no idea which ones mattered. A creeper fuse and a distant
+cow compete on equal terms.
+
+Hydrogen tiers them. Player and hostile sounds are never culled. Ambience, music
+and weather go first, and only once the pool is actually under pressure, which
+defaults to 75% full. Below that nothing is touched at all. Distance thresholds
+come from your render distance.
+
+### It stops drawing block entities you can't see
+
+Chests, banners, signs and beacons submit a full animated model each. Vanilla
+frustum-culls them per section, but a chest room seen from across the base still
+pays for every lid. The same sub-pixel test used on entities applies here, so
+anything projecting to less than a physical pixel is skipped.
+
+### It skips particle physics behind your head
+
+Every live particle runs a block collision sweep each tick whether or not it's on
+screen. Particles behind the camera get their collision and movement skipped while
+still ageing normally, so they expire exactly on schedule. Only particles behind
+you are culled by default, since something off to the side may be moving into
+view.
+
+### It can thin distant mob AI and idle hoppers
+
+Two server-side options, both off by default because they change simulation
+rather than presentation.
+
+Passive mobs beyond 48 blocks with no player nearby can run their goal selector
+one tick in four instead of every tick. Hostile mobs, anything with a target and
+anything being ridden are never touched, and movement and collision still run
+every tick so nothing falls through the world. This thins AI rather than
+disabling it, because mobs frozen mid-path break farms and the saving between
+"one in four" and "never" isn't worth that.
+
+Empty hoppers can have their pickup scan thinned the same way. The skip only
+happens when the hopper is empty and has no cooldown left to burn, so vanilla
+transfer timing is untouched. Worst case an item waits a fifth of a second longer
+against a transfer cooldown of eight ticks.
+
+Turn them on with `ai.throttle.enabled=true` and `hopper.throttle.enabled=true`.
+
+## The five second benchmarkThe first time you load a world, Hydrogen throws away one second of loading
 frames and then watches the next five with every adaptive feature switched off.
 It records frame time percentiles, jitter, allocation rate and video memory
 growth, then derives its thresholds from those. Nothing is drawn while it runs
@@ -147,8 +192,33 @@ drs.minScale=0.70                       # never scale below this
 target.frameTimeMs=auto                 # set 16.7 to just target 60fps
 cpu.governor.allowPowerPlanSwitch=auto  # auto means AC only, never on battery
 gc.enabled=true
+audio.pressureAt=0.75                   # pool fill before sound culling starts
+particle.cullPhysics=true
+ai.throttle.enabled=false               # opt-in, changes mob behaviour
+hopper.throttle.enabled=false           # opt-in, adds slight pickup delay
 log.verbose=false                       # log every tuning decision
 ```
+
+## Two things this deliberately does not do
+
+**GUI item flat lighting.** The usual pitch is that switching inventory items to
+flat lighting cuts their render cost. It doesn't. `setupForFlatItems` sets two
+directional light vectors as uniforms; the same fragment shader runs either way,
+so you'd change how every 3D item looks in your inventory for no measurable gain.
+The real cost of GUI item rendering is draw call count, which is what
+ImmediatelyFast already solves properly.
+
+**Object pooling for Vec3 and SectionPos.** Both are immutable and both escape
+into vanilla code everywhere: stored in entity fields, put in packets, used as
+HashMap keys. Pooling requires knowing when the last reference dies, and there is
+no way to know that for objects handed to code you don't control. Recycling a
+live `Vec3` corrupts entity positions silently; recycling a `SectionPos` being
+used as a map key corrupts the map. On top of that, allocating a 32-byte object
+in a TLAB is a pointer bump, escape analysis often removes it entirely, and a
+young-gen collector only pays for objects that survive. Pool bookkeeping would
+very likely be slower as well as unsafe. Hydrogen measures your allocation rate
+and schedules collections around it instead, which is the part that actually
+helps.
 
 ## Running with other mods
 
@@ -224,4 +294,4 @@ game already ships, which is why the jar is about 130KB.
 
 ## Licence
 
-MIT.
+MIT. Do what you like with it.
