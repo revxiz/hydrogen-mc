@@ -58,7 +58,7 @@ public final class ResolutionController {
 		double min = budget.drsMinScale();
 		double max = budget.drsMaxScale();
 		double step = budget.drsStep();
-		double budgetMs = budget.targetFrameMs() * budget.toleranceFactor();
+		double budgetMs = budget.drsBudgetMs();
 
 		boolean vramPressure = vram.known() && vram.usedPercent() >= budget.drsVramHighPercent();
 		boolean gpuPressure = frame.usable() && frame.p95Ms() > budgetMs;

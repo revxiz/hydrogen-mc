@@ -33,25 +33,82 @@ public final class Budget {
 
 	// ---------------------------------------------------------------- frame
 
-	/** 1000 / active refresh rate, unless the user pinned a value. */
+	/**
+	 * Frame time the tuner aims at.
+	 *
+	 * Normally the panel's own rate. When calibration shows the machine cannot
+	 * hold that even with scaling at its floor, the target steps down through
+	 * refresh divisors (144 to 72 to 48) and settles on the fastest one it can
+	 * actually keep. Chasing an impossible number would just pin the governor on
+	 * and park resolution at the floor for no gain.
+	 */
 	public double targetFrameMs() {
-		return config.number("target.frameTimeMs", hw.display().targetFrameMs());
+		if (!config.isAuto("target.frameTimeMs")) {
+			return config.number("target.frameTimeMs", hw.display().targetFrameMs());
+		}
+
+		double panel = hw.display().targetFrameMs();
+
+		if (!baseline.valid()) {
+			return panel;
+		}
+
+		double reachable = reachableMs();
+
+		if (reachable <= panel) {
+			return panel;
+		}
+
+		for (int divisor = 2; divisor <= 4; divisor++) {
+			if (reachable <= panel * divisor) {
+				return panel * divisor;
+			}
+		}
+
+		return panel * 4.0D;
+	}
+
+	/**
+	 * Best frame time the machine could plausibly reach. GPU cost tracks pixel
+	 * count, so scaling to the floor buys back roughly scale^1.5 once the CPU
+	 * side is accounted for.
+	 */
+	private double reachableMs() {
+		double p95 = baseline.p95Ms();
+
+		if (!config.bool("drs.enabled")) {
+			return p95;
+		}
+
+		return p95 * Math.pow(drsMinScale(), 1.5D);
 	}
 
 	/**
 	 * Multiplier applied to the target before a frame counts as a stall.
-	 * A machine with noisy frame pacing gets more slack, so the governor and DRS
-	 * do not fight normal variance.
+	 * A machine with noisy frame pacing gets more slack, so the governor does not
+	 * chase normal variance.
 	 */
 	public double toleranceFactor() {
 		double derived = 1.15D;
 
 		if (baseline.valid()) {
 			double relJitter = baseline.jitterMs() / Math.max(0.5D, baseline.p50Ms());
-			derived = 1.05D + Math.min(0.45D, relJitter * 1.5D);
+			derived = 1.05D + Math.min(0.30D, relJitter * 1.5D);
 		}
 
 		return config.number("target.toleranceFactor", derived);
+	}
+
+	/**
+	 * Frame time resolution scaling works against.
+	 *
+	 * Deliberately tighter than the governor's stall threshold: jitter slack
+	 * belongs to power decisions, not to picture quality. Widening this too would
+	 * double-discount the target and leave scaling asleep on a machine that needs
+	 * it.
+	 */
+	public double drsBudgetMs() {
+		return targetFrameMs() * 1.05D;
 	}
 
 	/** Frame time above which the governor asks for peak clocks. */
