@@ -7,8 +7,13 @@
 	"client": [
 		"MinecraftFrameMixin",
 		"EntityRenderDispatcherMixin",
+		"BlockEntityCullMixin",
+		"ParticleCullMixin",
+		"SoundEngineAccessor",
+		"ChannelAccessAccessor",
 		"TextureManagerAccessor",
 		"GameRendererDrsMixin",
+		"SoundEngineGateMixin",
 		"LevelRendererDeferMixin"
 	],
 	"injectors": {
