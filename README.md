@@ -10,8 +10,6 @@ your actual game for five seconds and works out its own thresholds from what it
 measured. A 4K 60Hz rig and a 1080p 240Hz rig get completely different settings
 without anyone touching a config file.
 
-Client side only. Fabric.
-
 ## Download
 
 | Jar | Minecraft | Java | Fabric Loader |
@@ -226,4 +224,4 @@ game already ships, which is why the jar is about 130KB.
 
 ## Licence
 
-MIT. Do what you like with it.
+MIT.
