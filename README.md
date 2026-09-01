@@ -15,6 +15,28 @@ Supported: **1.20.x, 1.21.x, 26.x**. One jar per branch.
 Requires Fabric API. Client only. The loader floor is only high on 26.x, where
 the unobfuscated game needs a loader that understands it.
 
+## Download
+
+Prebuilt 1.0.0 jars live in [`dist/`](dist). Direct links:
+
+- [1.20.x](../../raw/main/dist/hydrogen-mc1.20.1-1.0.0.jar)
+- [1.21 - 1.21.1](../../raw/main/dist/hydrogen-mc1.21.1-1.0.0.jar)
+- [1.21.9 - 1.21.11](../../raw/main/dist/hydrogen-mc1.21.11-1.0.0.jar)
+- [26.1+](../../raw/main/dist/hydrogen-mc26.2-1.0.0.jar)
+
+Drop the one matching your version into `mods/`.
+
+Tagged Releases and GitHub Packages are wired up in
+`.github/workflows/release.yml` but need Actions enabled on this account. Once
+it is, cutting a release is one command:
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+That builds all four branches on a clean runner, attaches the jars to a Release
+and publishes them to GitHub Packages.
+
 ## What it does
 
 ### Hardware-aware CPU and OS governance
