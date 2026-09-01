@@ -11,6 +11,7 @@
 		"sources": "https://github.com/revxiz/hydrogen-mc"
 	},
 	"license": "MIT",
+	"icon": "assets/hydrogen/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"preLaunch": [
