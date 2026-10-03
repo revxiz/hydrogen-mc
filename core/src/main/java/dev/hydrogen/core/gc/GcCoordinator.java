@@ -1,5 +1,6 @@
 package dev.hydrogen.core.gc;
 
+import com.sun.management.HotSpotDiagnosticMXBean;
 import dev.hydrogen.core.HLog;
 import dev.hydrogen.core.config.HConfig;
 import dev.hydrogen.core.hw.Budget;
@@ -14,14 +15,21 @@ import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Listens to GC notifications and pulls collections forward into moments the
- * player will not feel: standing still, a screen open, or a paused game.
+ * player will not feel: a paused game, a screen open, or standing still.
  *
  * The JVM owns the final decision. All this does is move the request earlier so
  * the collector is less likely to fire mid-swing. Trigger levels come from the
  * measured allocation rate, not from a fixed percentage.
+ *
+ * The request is made from a background thread, never the render thread, so a
+ * concurrent collector (ZGC, Shenandoah, or G1 with ExplicitGCInvokesConcurrent)
+ * costs the frame nothing. When the collector would stop the world, idle moments
+ * in the world are skipped and only paused or menu time is used.
  */
 public final class GcCoordinator {
 	private static final String GC_NOTIFICATION = "com.sun.management.gc.notification";
@@ -30,9 +38,12 @@ public final class GcCoordinator {
 	private final Budget budget;
 	private final List<NotificationEmitter> emitters = new ArrayList<>();
 	private final NotificationListener listener = this::onNotification;
+	private final AtomicBoolean collecting = new AtomicBoolean();
 
 	private MemoryMXBean memory;
 	private boolean explicitGcDisabled;
+	private boolean concurrentExplicit;
+	private String collector = "unknown";
 	private boolean installed;
 
 	private volatile long lastSweepMs;
@@ -57,13 +68,34 @@ public final class GcCoordinator {
 
 		try {
 			memory = ManagementFactory.getMemoryMXBean();
-			explicitGcDisabled = detectExplicitGcDisabled();
+			explicitGcDisabled = vmFlag("DisableExplicitGC");
+
+			StringBuilder names = new StringBuilder();
 
 			for (GarbageCollectorMXBean bean : ManagementFactory.getGarbageCollectorMXBeans()) {
+				names.append(bean.getName()).append(';');
+
 				if (bean instanceof NotificationEmitter emitter) {
 					emitter.addNotificationListener(listener, null, null);
 					emitters.add(emitter);
 				}
+			}
+
+			String all = names.toString().toLowerCase(Locale.ROOT);
+
+			if (all.contains("zgc")) {
+				collector = "ZGC";
+				concurrentExplicit = true;
+			} else if (all.contains("shenandoah")) {
+				collector = "Shenandoah";
+				concurrentExplicit = true;
+			} else if (all.contains("g1")) {
+				collector = "G1";
+				concurrentExplicit = vmFlag("ExplicitGCInvokesConcurrent");
+			} else if (all.contains("ps ") || all.contains("parallel")) {
+				collector = "Parallel";
+			} else if (all.contains("copy") || all.contains("marksweep")) {
+				collector = "Serial";
 			}
 
 			installed = true;
@@ -77,15 +109,26 @@ public final class GcCoordinator {
 		}
 	}
 
-	private static boolean detectExplicitGcDisabled() {
+	/** Reads the live VM flag, which also covers JAVA_TOOL_OPTIONS and argument files. */
+	private static boolean vmFlag(String name) {
+		try {
+			HotSpotDiagnosticMXBean hs = ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class);
+
+			if (hs != null) {
+				return Boolean.parseBoolean(hs.getVMOption(name).getValue());
+			}
+		} catch (Throwable ignored) {
+			// Not HotSpot, or the flag does not exist. Fall back to the command line.
+		}
+
 		try {
 			for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-				if (arg.contains("+DisableExplicitGC")) {
+				if (arg.contains("+" + name)) {
 					return true;
 				}
 			}
 		} catch (Throwable ignored) {
-			// Argument list is not always readable; assume explicit GC works.
+			// Argument list is not always readable.
 		}
 
 		return false;
@@ -97,6 +140,13 @@ public final class GcCoordinator {
 		}
 
 		try {
+			String name = String.valueOf(data.get("gcName")).toLowerCase(Locale.ROOT);
+
+			// Concurrent cycles report their whole length, which is not a pause.
+			if (name.contains("cycles") || name.contains("concurrent")) {
+				return;
+			}
+
 			CompositeData info = (CompositeData) data.get("gcInfo");
 			long durationMs = (Long) info.get("duration");
 
@@ -126,7 +176,7 @@ public final class GcCoordinator {
 	 * @param paused        the game loop is paused
 	 */
 	public void tick(double movementSpeed, boolean screenOpen, boolean paused) {
-		if (!installed || !config.bool("gc.enabled") || explicitGcDisabled || memory == null) {
+		if (!installed || !config.bool("gc.enabled") || explicitGcDisabled || memory == null || collecting.get()) {
 			return;
 		}
 
@@ -140,22 +190,42 @@ public final class GcCoordinator {
 			return;
 		}
 
-		boolean idle = movementSpeed <= 0.012D;
+		boolean idle = movementSpeed <= 0.012D && config.boolAuto("gc.allowWhileIdle", concurrentExplicit);
 		boolean window = paused || idle || (screenOpen && config.bool("gc.allowOnScreenOpen"));
 
 		if (!window || heapPercent() < budget.gcHeapTriggerPercent()) {
 			return;
 		}
 
-		long before = used();
 		lastSweepMs = now;
-		sweeps++;
-		System.gc();
-		long after = used();
+		collectAsync();
+	}
 
-		if (after < before) {
-			reclaimedMb += (before - after) / 1048576L;
+	/** The render thread only hands the request over; it never waits on the collector. */
+	private void collectAsync() {
+		if (!collecting.compareAndSet(false, true)) {
+			return;
 		}
+
+		Thread t = new Thread(() -> {
+			try {
+				long before = used();
+				sweeps++;
+				System.gc();
+				long after = used();
+
+				if (after < before) {
+					reclaimedMb += (before - after) / 1048576L;
+				}
+			} catch (Throwable ignored) {
+				// Nothing to recover; the next window tries again.
+			} finally {
+				collecting.set(false);
+			}
+		}, "Hydrogen GC request");
+
+		t.setDaemon(true);
+		t.start();
 	}
 
 	private long used() {
@@ -182,6 +252,10 @@ public final class GcCoordinator {
 
 	public long heapUsedBytes() {
 		return used();
+	}
+
+	public String collector() {
+		return collector + (concurrentExplicit ? " (concurrent)" : "");
 	}
 
 	public GcStats stats() {

@@ -6,32 +6,56 @@ import dev.hydrogen.core.hw.Budget;
 import dev.hydrogen.core.platform.NativePlatform;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * Builds one affinity mask per {@link ThreadRole} and applies it from inside the
  * thread being pinned, which is the only portable way to reach a thread handle.
+ *
+ * The thread that owns the frame (the render thread on a client, the server
+ * thread on a dedicated server) gets the best physical cores inside one cache
+ * domain. Everything else is kept off those cores and their SMT siblings, which
+ * is what actually stops a chunk build from landing on the core drawing the
+ * frame. Threads Hydrogen cannot reach from the inside are placed by a slow
+ * background sweep, see {@link ThreadSweep}.
  *
  * When the native call is unavailable or denied, the thread still gets a JVM
  * priority hint. Nothing here throws: a machine that refuses to be pinned simply
  * runs unpinned.
  */
 public final class CoreBinder {
+	/** Immutable, so binding threads never see a half-built plan. */
+	private record Plan(Map<ThreadRole, long[]> masks, Map<ThreadRole, String> text,
+			long[] primary, long[] worker, long[] full) {
+	}
+
+	private static final long SWEEP_MS = 5_000L;
+
 	private final NativePlatform platform;
 	private final HConfig config;
 	private final Budget budget;
 
-	private final Map<ThreadRole, long[]> masks = new EnumMap<>(ThreadRole.class);
-	private final Map<ThreadRole, String> plan = new EnumMap<>(ThreadRole.class);
 	private final AtomicInteger nativeBound = new AtomicInteger();
+	private final AtomicInteger hinted = new AtomicInteger();
 	private final AtomicInteger jvmOnly = new AtomicInteger();
+	private final Set<Long> ownedTids = ConcurrentHashMap.newKeySet();
 	private final ThreadLocal<Boolean> done = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
-	private boolean planned;
-	private String note = "not built";
+	private volatile Plan plan;
+	private volatile String note = "not built";
+	private volatile boolean dedicatedServer;
+	private volatile long primaryTid = -1L;
+	private volatile int lastSweepMoved;
+
+	private Thread sweeper;
+	private volatile boolean sweeping;
 
 	public CoreBinder(NativePlatform platform, HConfig config, Budget budget) {
 		this.platform = platform;
@@ -39,70 +63,86 @@ public final class CoreBinder {
 		this.budget = budget;
 	}
 
-	/** Deferred until the topology and budget are known. */
-	public synchronized void buildPlan() {
-		masks.clear();
-		plan.clear();
-		planned = false;
+	/**
+	 * @param dedicated true on a dedicated server, where the server thread owns
+	 *                  the frame and gets the cores a client gives its render thread
+	 */
+	public synchronized void buildPlan(boolean dedicated) {
+		this.dedicatedServer = dedicated;
 
 		CpuTopology topo = platform.topology();
 		int total = topo.logicalCount();
 
 		if (total < 4) {
+			plan = null;
 			note = "too few CPUs (" + total + ")";
 			return;
 		}
 
 		List<LogicalCpu> fast = topo.fastPrimaries();
-		List<LogicalCpu> background = topo.backgroundPool();
+		LogicalCpu best = fast.get(0);
 
-		int renderWanted = Math.max(1, Math.min(budget.renderCores(), Math.max(1, fast.size() - 1)));
-		List<LogicalCpu> render = new ArrayList<>(fast.subList(0, renderWanted));
-
-		List<LogicalCpu> server = new ArrayList<>();
+		// A frame thread migrating between CCDs or clusters pays for it in cache
+		// misses, so its cores come from the best core's own cache domain.
+		List<LogicalCpu> domain = new ArrayList<>();
 
 		for (LogicalCpu c : fast) {
-			if (!render.contains(c)) {
-				server.add(c);
+			if (best.cacheId() < 0 || c.cacheId() == best.cacheId()) {
+				domain.add(c);
 			}
 		}
 
-		if (server.isEmpty()) {
-			server.addAll(render);
-		}
+		int wanted = Math.max(1, Math.min(budget.renderCores(), domain.size()));
+		List<LogicalCpu> primary = new ArrayList<>(domain.subList(0, wanted));
+		List<LogicalCpu> reserved = topo.siblingsOf(primary);
 
-		// Meshing gets everything the frame path does not own, so it never
-		// preempts a frame but still scales across all spare hardware.
-		List<LogicalCpu> chunk = new ArrayList<>(background);
+		List<LogicalCpu> second = new ArrayList<>();
 
 		for (LogicalCpu c : fast) {
-			if (!render.contains(c)) {
-				chunk.add(c);
+			if (!primary.contains(c)) {
+				second.add(c);
 			}
 		}
 
-		if (chunk.isEmpty()) {
-			chunk.addAll(topo.cpus());
+		if (second.isEmpty()) {
+			second.addAll(primary);
 		}
 
-		List<LogicalCpu> bg = background.isEmpty() ? chunk : background;
+		List<LogicalCpu> worker = topo.select(c -> !reserved.contains(c));
 
-		put(ThreadRole.RENDER, render, total);
-		put(ThreadRole.SERVER, server, total);
-		put(ThreadRole.CHUNK_BUILD, chunk, total);
-		put(ThreadRole.BACKGROUND, bg, total);
+		if (worker.isEmpty()) {
+			worker = new ArrayList<>(topo.cpus());
+		}
 
-		planned = true;
-		note = "render=" + plan.get(ThreadRole.RENDER) + " mesh=" + plan.get(ThreadRole.CHUNK_BUILD);
+		List<LogicalCpu> background = new ArrayList<>(topo.backgroundPool());
+		background.removeAll(reserved);
+
+		if (background.isEmpty()) {
+			background = worker;
+		}
+
+		int span = topo.indexSpan();
+		Map<ThreadRole, long[]> masks = new EnumMap<>(ThreadRole.class);
+		Map<ThreadRole, String> text = new EnumMap<>(ThreadRole.class);
+
+		put(masks, text, ThreadRole.RENDER, primary, span);
+		put(masks, text, ThreadRole.SERVER, dedicated ? primary : second, span);
+		put(masks, text, ThreadRole.CHUNK_BUILD, worker, span);
+		put(masks, text, ThreadRole.BACKGROUND, background, span);
+
+		plan = new Plan(Collections.unmodifiableMap(masks), Collections.unmodifiableMap(text),
+				CpuTopology.mask(primary, span), CpuTopology.mask(worker, span), CpuTopology.mask(topo.cpus(), span));
+		note = (dedicated ? "server=" : "render=") + describe(primary) + " workers=" + describe(worker);
 
 		if (config.bool("log.verbose")) {
 			HLog.LOG.info("Hydrogen affinity plan: {}", note);
 		}
 	}
 
-	private void put(ThreadRole role, List<LogicalCpu> cpus, int total) {
-		masks.put(role, CpuTopology.mask(cpus, total));
-		plan.put(role, describe(cpus));
+	private static void put(Map<ThreadRole, long[]> masks, Map<ThreadRole, String> text,
+			ThreadRole role, List<LogicalCpu> cpus, int span) {
+		masks.put(role, CpuTopology.mask(cpus, span));
+		text.put(role, describe(cpus));
 	}
 
 	private static String describe(List<LogicalCpu> cpus) {
@@ -130,7 +170,11 @@ public final class CoreBinder {
 		try {
 			applyJvmPriority(role);
 
-			if (!config.bool("cpu.affinity.enabled") || !planned) {
+			Plan p = plan;
+			boolean owner = role == (dedicatedServer ? ThreadRole.SERVER : ThreadRole.RENDER);
+
+			if (!config.bool("cpu.affinity.enabled") || p == null) {
+				hint(role);
 				return;
 			}
 
@@ -138,20 +182,28 @@ public final class CoreBinder {
 				return;
 			}
 
-			long[] mask = masks.get(role);
+			long[] mask = p.masks().get(role);
 
 			if (mask != null && platform.bindCurrentThread(mask)) {
 				nativeBound.incrementAndGet();
+				long tid = platform.currentThreadId();
 
-				if (role == ThreadRole.RENDER && config.bool("cpu.priority.native")) {
+				if (tid >= 0L) {
+					ownedTids.add(tid);
+
+					if (owner) {
+						primaryTid = tid;
+					}
+				}
+
+				if (owner && config.bool("cpu.priority.native")) {
 					platform.setCurrentThreadPriority(NativePlatform.PRIORITY_HIGH);
 				}
 
 				if (config.bool("log.verbose")) {
-					HLog.LOG.info("Hydrogen pinned {} -> CPUs {}",
-							Thread.currentThread().getName(), plan.get(role));
+					HLog.LOG.info("Hydrogen pinned {} -> CPUs {}", Thread.currentThread().getName(), p.text().get(role));
 				}
-			} else {
+			} else if (!hint(role)) {
 				jvmOnly.incrementAndGet();
 				HLog.once("bind-fallback",
 						"Hydrogen: thread pinning unavailable, falling back to JVM thread priorities");
@@ -160,6 +212,15 @@ public final class CoreBinder {
 			// Pinning is an optimisation; never let it break a game thread.
 			HLog.warnOnce("bind-error", "Hydrogen: thread binding failed, continuing unpinned", t);
 		}
+	}
+
+	private boolean hint(ThreadRole role) {
+		if (platform.hintCurrentThread(role)) {
+			hinted.incrementAndGet();
+			return true;
+		}
+
+		return false;
 	}
 
 	/** Always applied, and the only lever left when native calls are denied. */
@@ -182,16 +243,109 @@ public final class CoreBinder {
 		}
 	}
 
+	/**
+	 * Starts the background sweep once the frame thread is pinned. Without a known
+	 * frame thread id the sweep could mistake that thread for one that inherited
+	 * its mask, so nothing runs until then.
+	 */
+	public void startSweeper() {
+		// Called from every client tick; the common case is a single volatile read.
+		if (sweeping || plan == null || primaryTid < 0L) {
+			return;
+		}
+
+		startSweeperLocked();
+	}
+
+	private synchronized void startSweeperLocked() {
+		if (sweeper != null) {
+			return;
+		}
+
+		if (!config.bool("cpu.affinity.enabled") || !config.bool("cpu.affinity.pinBackground")) {
+			return;
+		}
+
+		sweeping = true;
+		sweeper = new Thread(this::sweepLoop, "Hydrogen affinity");
+		sweeper.setDaemon(true);
+		sweeper.setPriority(Thread.MIN_PRIORITY);
+		sweeper.start();
+	}
+
+	private void sweepLoop() {
+		bindCurrent(ThreadRole.BACKGROUND);
+		long delay = 1_000L;
+
+		while (sweeping) {
+			LockSupport.parkNanos(delay * 1_000_000L);
+
+			if (!sweeping) {
+				break;
+			}
+
+			if (sweepNow() < 0) {
+				HLog.once("sweep-unsupported",
+						"Hydrogen: this OS does not let other threads be placed, only threads Hydrogen starts are pinned");
+				break;
+			}
+
+			// Catch the burst of threads created right after world join, then settle.
+			delay = Math.min(SWEEP_MS, delay * 2L);
+		}
+	}
+
+	/** One pass. Returns threads moved, or -1 when the platform cannot enumerate threads. */
+	public int sweepNow() {
+		Plan p = plan;
+
+		if (p == null || primaryTid < 0L) {
+			return 0;
+		}
+
+		try {
+			int moved = platform.sweepThreads(new ThreadSweep(primaryTid, Set.copyOf(ownedTids),
+					p.primary(), p.worker(), p.full()));
+			lastSweepMoved = moved;
+
+			if (moved > 0 && config.bool("log.verbose")) {
+				HLog.LOG.info("Hydrogen: moved {} threads off the frame cores", moved);
+			}
+
+			return moved;
+		} catch (Throwable t) {
+			HLog.warnOnce("sweep-error", "Hydrogen: thread sweep failed, stopping it", t);
+			return -1;
+		}
+	}
+
+	public synchronized void stopSweeper() {
+		sweeping = false;
+
+		if (sweeper != null) {
+			LockSupport.unpark(sweeper);
+			sweeper = null;
+		}
+	}
+
 	public int nativeBoundThreads() {
 		return nativeBound.get();
+	}
+
+	public int hintedThreads() {
+		return hinted.get();
 	}
 
 	public int jvmOnlyThreads() {
 		return jvmOnly.get();
 	}
 
+	public int lastSweepMoved() {
+		return lastSweepMoved;
+	}
+
 	public boolean planned() {
-		return planned;
+		return plan != null;
 	}
 
 	public String note() {
@@ -199,6 +353,7 @@ public final class CoreBinder {
 	}
 
 	public String planFor(ThreadRole role) {
-		return plan.getOrDefault(role, "-");
+		Plan p = plan;
+		return p == null ? "-" : p.text().getOrDefault(role, "-");
 	}
 }

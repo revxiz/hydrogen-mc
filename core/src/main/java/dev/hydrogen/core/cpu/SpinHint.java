@@ -36,7 +36,7 @@ final class SpinHint implements AutoCloseable {
 		List<LogicalCpu> pool = topo.backgroundPool();
 
 		if (!pool.isEmpty()) {
-			platform.bindCurrentThread(CpuTopology.mask(pool.subList(0, 1), topo.logicalCount()));
+			platform.bindCurrentThread(CpuTopology.mask(pool.subList(0, 1), topo.indexSpan()));
 		}
 
 		while (!closed) {

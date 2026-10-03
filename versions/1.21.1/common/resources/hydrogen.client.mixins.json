@@ -1,0 +1,26 @@
+{
+	"required": true,
+	"minVersion": "0.8",
+	"package": "dev.hydrogen.mc.mixin",
+	"compatibilityLevel": "${mixin_compat}",${refmap_line}
+	"plugin": "dev.hydrogen.mc.HydrogenMixinPlugin",
+	"client": [
+		"AbstractTextureMixin",
+		"BlockEntityCullMixin",
+		"ChannelAccessAccessor",
+		"EntityRendererCullMixin",
+		"GameRendererDrsMixin",
+		"LevelRendererDeferMixin",
+		"MainTargetAccessor",
+		"MinecraftFrameMixin",
+		"ParticleCullMixin",
+		"RenderDistanceCapMixin",
+		"SoundEngineAccessor",
+		"SoundEngineGateMixin",
+		"TextureManagerAccessor",
+		"TextureManagerUseMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

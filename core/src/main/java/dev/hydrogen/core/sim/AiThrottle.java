@@ -1,6 +1,7 @@
 package dev.hydrogen.core.sim;
 
-import dev.hydrogen.core.config.HConfig;
+import dev.hydrogen.core.hw.Budget;
+import dev.hydrogen.core.hw.Tuning;
 
 /**
  * Distance-based AI throttling for passive mobs.
@@ -11,32 +12,52 @@ import dev.hydrogen.core.config.HConfig;
  * farms and leaves animals frozen mid-path, and the CPU saving between "one in
  * four" and "never" is not worth that.
  *
- * Off by default. This is the only part of Hydrogen that changes simulation
- * behaviour rather than presentation.
+ * Off by default. This and the hopper throttle are the only parts of Hydrogen
+ * that change simulation behaviour rather than presentation.
  */
 public final class AiThrottle {
-	private final HConfig config;
+	private final Budget budget;
 
 	private long evaluated;
 	private long throttled;
 
-	public AiThrottle(HConfig config) {
-		this.config = config;
+	public AiThrottle(Budget budget) {
+		this.budget = budget;
 	}
 
 	public boolean enabled() {
-		return config.bool("ai.throttle.enabled");
+		Tuning t = budget.tuning();
+		return t.enabled() && t.aiThrottle();
 	}
 
 	public double distance() {
-		return Math.max(16.0D, config.fixed("ai.throttle.distance"));
+		return budget.tuning().aiDistance();
 	}
 
 	public int interval() {
-		return Math.max(2, (int) config.fixed("ai.throttle.interval"));
+		return budget.tuning().aiInterval();
 	}
 
 	/**
+	 * Cheap half of the decision, checked before any world query. A mob that will
+	 * run its AI this tick anyway does not need a nearest-player search.
+	 *
+	 * @param tickCount the mob's own age, used to stagger the work
+	 * @return true when this tick could be skipped if no player is near
+	 */
+	public boolean candidate(int tickCount) {
+		evaluated++;
+		return tickCount % interval() != 0;
+	}
+
+	/** Called after the world query confirmed nobody is in range. */
+	public void recordSkip() {
+		throttled++;
+	}
+
+	/**
+	 * Full decision in one call, kept for callers that already know the distance.
+	 *
 	 * @param hostile          mob implements Enemy, or is otherwise dangerous
 	 * @param hasTarget        mob is currently tracking something
 	 * @param playerDistanceSq squared distance to the nearest player, negative when none
@@ -48,21 +69,17 @@ public final class AiThrottle {
 			return false;
 		}
 
-		evaluated++;
-
 		double d = distance();
 
-		// No player in range at all is the strongest case for thinning out.
 		if (playerDistanceSq >= 0.0D && playerDistanceSq < d * d) {
 			return false;
 		}
 
-		// Stagger by entity age so mobs do not all wake on the same tick.
-		if (tickCount % interval() == 0) {
+		if (!candidate(tickCount)) {
 			return false;
 		}
 
-		throttled++;
+		recordSkip();
 		return true;
 	}
 

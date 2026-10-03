@@ -1,0 +1,22 @@
+// NeoForge, built with ModDevGradle. NeoForge runs on Mojang names, so the jar
+// needs no remapping and the mixin configs need no refmap.
+apply from: rootProject.file('gradle/common.gradle')
+
+neoForge {
+	version = neoforge_version
+	validateAccessTransformers = false
+
+	runs {
+		client {
+			client()
+		}
+	}
+
+	mods {
+		"${rootProject.mod_id}" {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+ext.hydrogenJar = tasks.named('jar')

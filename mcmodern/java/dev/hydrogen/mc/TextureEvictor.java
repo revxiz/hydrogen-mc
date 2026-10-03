@@ -15,52 +15,61 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Pushes GPU textures back to system RAM before the driver starts thrashing.
+ * Pushes idle GPU textures back to system RAM before the driver starts thrashing.
  *
- * Only single-file textures are released; those are re-uploaded lazily on next
- * use. Atlases are never touched because the game cannot rebuild them on demand.
+ * Only plain single-file textures that nothing has drawn for the configured idle
+ * time are released. Those are re-uploaded lazily the next time they are
+ * requested, so the worst case is one late upload of something that was not on
+ * screen. Atlases are never touched because the game cannot rebuild them on
+ * demand, and neither are subclasses such as downloaded player skins, which
+ * cannot be reloaded from resources at all.
  *
- * Identical to the 1.20/1.21.1 version apart from the ResourceLocation to
- * Identifier rename in 1.21.9+.
+ * A hard pass additionally caps the effective render distance, which is the
+ * largest single consumer of section geometry memory.
  */
 public final class TextureEvictor {
-	private static int trimmedFrom = -1;
-
 	private TextureEvictor() {
 	}
 
 	public static void run(Minecraft mc, Hydrogen h, EvictionController.Action action, VramSnapshot vram) {
 		try {
-			int released = releaseSimpleTextures(mc, h);
+			int released = releaseIdle(mc, h);
+			h.eviction().recordRelease(released);
 
 			if (action == EvictionController.Action.HARD) {
-				trimRenderDistance(mc, h);
-			} else {
-				restoreRenderDistance(mc, h, vram);
+				h.eviction().tightenCap(mc.options.getEffectiveRenderDistance());
 			}
 
 			if (released > 0 && h.config().bool("log.verbose")) {
-				HLog.LOG.info("Hydrogen: released {} GPU textures at {}% VRAM",
+				HLog.LOG.info("Hydrogen: released {} idle GPU textures at {}% VRAM",
 						released, Math.round(vram.usedPercent()));
 			}
 		} catch (Throwable t) {
-			HLog.warnOnce("evict", "Hydrogen: texture eviction failed, feature disabled", t);
-			h.config().set("vram.enabled", "false");
+			HLog.warnOnce("evict", "Hydrogen: texture eviction failed, disabled for this session", t);
+			h.config().override("vram.enabled", "false");
 		}
 	}
 
-	private static int releaseSimpleTextures(Minecraft mc, Hydrogen h) {
-		Object manager = mc.getTextureManager();
-
-		if (!(manager instanceof TextureManagerAccessor accessor)) {
+	private static int releaseIdle(Minecraft mc, Hydrogen h) {
+		if (!(mc.getTextureManager() instanceof TextureManagerAccessor accessor)) {
 			return 0;
 		}
 
-		Map<Identifier, AbstractTexture> byPath = accessor.hydrogen$byPath();
+		long now = HydrogenClient.frameClockMs;
+		long idleMs = (long) (h.eviction().idleSeconds() * 1000.0D);
 		List<Identifier> victims = new ArrayList<>();
 
-		for (Map.Entry<Identifier, AbstractTexture> e : byPath.entrySet()) {
-			if (e.getValue() instanceof SimpleTexture) {
+		for (Map.Entry<Identifier, AbstractTexture> e : accessor.hydrogen$byPath().entrySet()) {
+			AbstractTexture texture = e.getValue();
+
+			if (texture == null || texture.getClass() != SimpleTexture.class || !(texture instanceof TextureUse use)) {
+				continue;
+			}
+
+			long last = use.hydrogen$lastUse();
+
+			// 0 means it was never looked up since loading; leave those to the next pass.
+			if (last > 0L && now - last >= idleMs) {
 				victims.add(e.getKey());
 			}
 		}
@@ -69,44 +78,6 @@ public final class TextureEvictor {
 			mc.getTextureManager().release(id);
 		}
 
-		h.eviction().recordRelease(victims.size() * 64L);
 		return victims.size();
-	}
-
-	private static void trimRenderDistance(Minecraft mc, Hydrogen h) {
-		if (!h.config().bool("vram.trimRenderDistance")) {
-			return;
-		}
-
-		int current = mc.options.renderDistance().get();
-
-		if (current <= 6) {
-			return;
-		}
-
-		if (trimmedFrom < 0) {
-			trimmedFrom = current;
-		}
-
-		mc.options.renderDistance().set(Math.max(6, current - 2));
-		HLog.LOG.info("Hydrogen: VRAM critical, render distance {} -> {}",
-				current, mc.options.renderDistance().get());
-	}
-
-	private static void restoreRenderDistance(Minecraft mc, Hydrogen h, VramSnapshot vram) {
-		if (trimmedFrom < 0 || !vram.known()) {
-			return;
-		}
-
-		if (vram.usedPercent() > h.budget().vramReleaseTargetPercent() - 5.0D) {
-			return;
-		}
-
-		int restore = Math.min(trimmedFrom, mc.options.renderDistance().get() + 1);
-		mc.options.renderDistance().set(restore);
-
-		if (restore >= trimmedFrom) {
-			trimmedFrom = -1;
-		}
 	}
 }

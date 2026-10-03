@@ -1,0 +1,30 @@
+// Forge 1.21 and newer, built with ForgeGradle 7. These Forge versions run on
+// Mojang names, so the jar needs no reobfuscation and no refmap. Forge reads the
+// mixin configs from the jar manifest.
+apply from: rootProject.file('gradle/common.gradle')
+
+minecraft {
+	if (isObfuscated) {
+		mappings channel: 'official', version: minecraft_version
+	}
+
+	runs {
+		register('client')
+	}
+}
+
+repositories {
+	minecraft.mavenizer(it)
+	maven fg.forgeMaven
+	maven fg.minecraftLibsMaven
+}
+
+dependencies {
+	implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
+}
+
+jar {
+	manifest.attributes('MixinConfigs': "${rootProject.mod_id}.mixins.json,${rootProject.mod_id}.client.mixins.json")
+}
+
+ext.hydrogenJar = tasks.named('jar')

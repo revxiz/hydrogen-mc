@@ -1,0 +1,16 @@
+// Fabric, built with Fabric Loom. Obfuscated Minecraft (before 26.1) uses the
+// remapping Loom plugin and Mojang mappings; 26.x ships unobfuscated.
+apply from: rootProject.file('gradle/common.gradle')
+
+dependencies {
+	minecraft "com.mojang:minecraft:${minecraft_version}"
+
+	if (isObfuscated) {
+		mappings loom.officialMojangMappings()
+		modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+	} else {
+		implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+	}
+}
+
+ext.hydrogenJar = isObfuscated ? tasks.named('remapJar') : tasks.named('jar')

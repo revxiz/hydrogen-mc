@@ -3,6 +3,7 @@ package dev.hydrogen.mc.platform;
 import dev.hydrogen.core.cpu.CpuClass;
 import dev.hydrogen.core.cpu.CpuTopology;
 import dev.hydrogen.core.cpu.LogicalCpu;
+import dev.hydrogen.core.cpu.ThreadRole;
 import dev.hydrogen.core.platform.NativePlatform;
 import org.lwjgl.system.JNI;
 import org.lwjgl.system.MemoryUtil;
@@ -15,18 +16,31 @@ import java.util.List;
 /**
  * macOS implementation.
  *
- * Darwin gives no user-space thread affinity API, so pinning always reports
- * false and Hydrogen falls back to JVM thread priorities. Topology still comes
- * from sysctl, including the Apple Silicon performance and efficiency counts,
- * which is what the meshing split actually needs.
+ * Darwin has no user-space thread affinity, so pinning always reports false.
+ * What it does have is quality-of-service classes, which on Apple Silicon are
+ * how the scheduler picks performance or efficiency cores: a user-interactive
+ * thread is kept on the P-cluster, a utility thread drifts to the E-cluster.
+ * Each role gets the matching class. Topology still comes from sysctl,
+ * including the Apple Silicon performance and efficiency counts.
  */
 final class MacPlatform implements NativePlatform {
+	// <sys/qos.h>
+	private static final int QOS_CLASS_USER_INTERACTIVE = 0x21;
+	private static final int QOS_CLASS_USER_INITIATED = 0x19;
+	private static final int QOS_CLASS_UTILITY = 0x11;
+
 	private final long pSysctlByName;
+	private final long pSetQosClassSelf;
+	private final long pPthreadMachThreadNp;
+	private final long pPthreadSelf;
 	private final CpuTopology topology;
 
 	MacPlatform() {
 		SharedLibrary libSystem = Natives.open("libSystem.B.dylib", "libSystem.dylib", "libc.dylib");
 		this.pSysctlByName = Natives.fn(libSystem, "sysctlbyname");
+		this.pSetQosClassSelf = Natives.fnQuiet(libSystem, "pthread_set_qos_class_self_np");
+		this.pPthreadSelf = Natives.fnQuiet(libSystem, "pthread_self");
+		this.pPthreadMachThreadNp = Natives.fnQuiet(libSystem, "pthread_mach_thread_np");
 		this.topology = readTopology();
 	}
 
@@ -91,8 +105,9 @@ final class MacPlatform implements NativePlatform {
 			size = MemoryUtil.nmemCallocChecked(1L, 8L);
 			MemoryUtil.memPutAddress(size, 8L);
 
-			// sysctlbyname(name, oldp, oldlenp, newp = null, newlen = 0)
-			int rc = JNI.invokePPPPI(MemoryUtil.memAddress(name), value, size, 0L, 0, pSysctlByName);
+			// sysctlbyname(name, oldp, oldlenp, newp = NULL, newlen = 0). newlen is a
+			// size_t, so it is passed as a full 64-bit zero.
+			int rc = JNI.invokePPPPPI(MemoryUtil.memAddress(name), value, size, 0L, 0L, pSysctlByName);
 
 			if (rc != 0) {
 				return fallback;
@@ -119,7 +134,41 @@ final class MacPlatform implements NativePlatform {
 
 	@Override
 	public boolean bindCurrentThread(long[] mask) {
-		return false; // Not offered by Darwin; JVM priorities are the fallback.
+		return false; // Not offered by Darwin; quality-of-service classes are the lever.
+	}
+
+	/** The render and server threads ask for the P-cluster, background work steps aside. */
+	@Override
+	public boolean hintCurrentThread(ThreadRole role) {
+		if (!Natives.has(pSetQosClassSelf)) {
+			return false;
+		}
+
+		int qos = switch (role) {
+			case RENDER -> QOS_CLASS_USER_INTERACTIVE;
+			case SERVER -> QOS_CLASS_USER_INITIATED;
+			case CHUNK_BUILD -> QOS_CLASS_USER_INITIATED;
+			case BACKGROUND -> QOS_CLASS_UTILITY;
+		};
+
+		try {
+			return JNI.invokeI(qos, 0, pSetQosClassSelf) == 0;
+		} catch (Throwable t) {
+			return false;
+		}
+	}
+
+	@Override
+	public long currentThreadId() {
+		if (!Natives.has(pPthreadSelf, pPthreadMachThreadNp)) {
+			return -1L;
+		}
+
+		try {
+			return JNI.invokePI(JNI.invokeP(pPthreadSelf), pPthreadMachThreadNp) & 0xFFFFFFFFL;
+		} catch (Throwable t) {
+			return -1L;
+		}
 	}
 
 	@Override

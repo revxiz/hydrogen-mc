@@ -2,6 +2,7 @@ package dev.hydrogen.core.cpu;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -14,7 +15,7 @@ public final class CpuTopology {
 
 	public CpuTopology(List<LogicalCpu> cpus, String source) {
 		List<LogicalCpu> copy = new ArrayList<>(cpus);
-		copy.sort((a, b) -> Integer.compare(a.index(), b.index()));
+		copy.sort(Comparator.comparingInt(LogicalCpu::index));
 		this.cpus = Collections.unmodifiableList(copy);
 		this.source = source;
 	}
@@ -40,6 +41,17 @@ public final class CpuTopology {
 
 	public int logicalCount() {
 		return cpus.size();
+	}
+
+	/** Highest OS processor index plus one. Masks are sized from this, not the count. */
+	public int indexSpan() {
+		int max = -1;
+
+		for (LogicalCpu c : cpus) {
+			max = Math.max(max, c.index());
+		}
+
+		return max + 1;
 	}
 
 	public int physicalCount() {
@@ -74,6 +86,25 @@ public final class CpuTopology {
 		return false;
 	}
 
+	/** True when cores sit behind last-level caches of different sizes, as on X3D parts. */
+	public boolean mixedCache() {
+		long size = -1L;
+
+		for (LogicalCpu c : cpus) {
+			if (c.cacheKb() <= 0L) {
+				continue;
+			}
+
+			if (size < 0L) {
+				size = c.cacheKb();
+			} else if (size != c.cacheKb()) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public List<LogicalCpu> select(Predicate<LogicalCpu> filter) {
 		List<LogicalCpu> out = new ArrayList<>();
 
@@ -86,7 +117,28 @@ public final class CpuTopology {
 		return out;
 	}
 
-	/** Performance primaries ordered by descending clock, best candidates first. */
+	/**
+	 * Best candidates for latency-critical threads first.
+	 *
+	 * On a part with uneven caches (a Ryzen X3D), the large cache wins over a
+	 * slightly higher clock: Minecraft's render thread is far more sensitive to
+	 * cache misses than to a few hundred MHz, which is also why AMD's own driver
+	 * parks the frequency CCD for games. After that the firmware's own ranking
+	 * (CPPC preferred cores, scheduling class) and finally the advertised clock.
+	 */
+	public Comparator<LogicalCpu> preference() {
+		Comparator<LogicalCpu> order = Comparator.comparingInt(LogicalCpu::perfRank).reversed()
+				.thenComparing(Comparator.comparingLong(LogicalCpu::maxFreqKHz).reversed())
+				.thenComparingInt(LogicalCpu::index);
+
+		if (mixedCache()) {
+			order = Comparator.comparingLong(LogicalCpu::cacheKb).reversed().thenComparing(order);
+		}
+
+		return order;
+	}
+
+	/** Performance primaries ordered by preference, best candidates first. */
 	public List<LogicalCpu> fastPrimaries() {
 		List<LogicalCpu> out = select(c -> c.isPrimaryThread() && c.cpuClass() != CpuClass.EFFICIENCY);
 
@@ -98,7 +150,7 @@ public final class CpuTopology {
 			out = new ArrayList<>(cpus);
 		}
 
-		out.sort((a, b) -> Long.compare(b.maxFreqKHz(), a.maxFreqKHz()));
+		out.sort(preference());
 		return out;
 	}
 
@@ -114,20 +166,76 @@ public final class CpuTopology {
 		return out;
 	}
 
+	/** Every logical CPU sharing a physical core with one of {@code owners}. */
+	public List<LogicalCpu> siblingsOf(List<LogicalCpu> owners) {
+		return select(c -> {
+			for (LogicalCpu o : owners) {
+				if (c.sameCore(o)) {
+					return true;
+				}
+			}
+
+			return false;
+		});
+	}
+
 	/** Packs processor indices into a 64-bit-per-group affinity mask. */
-	public static long[] mask(List<LogicalCpu> selection, int logicalCount) {
-		int groups = Math.max(1, (logicalCount + 63) / 64);
+	public static long[] mask(List<LogicalCpu> selection, int indexSpan) {
+		int groups = Math.max(1, (indexSpan + 63) / 64);
+
+		for (LogicalCpu c : selection) {
+			groups = Math.max(groups, (c.index() >>> 6) + 1);
+		}
+
 		long[] bits = new long[groups];
 
 		for (LogicalCpu c : selection) {
 			int i = c.index();
 
-			if (i >= 0 && i < groups * 64) {
+			if (i >= 0) {
 				bits[i >>> 6] |= 1L << (i & 63);
 			}
 		}
 
 		return bits;
+	}
+
+	/** Parses kernel CPU lists such as {@code 0-7,16-23}. Malformed parts are skipped. */
+	public static List<Integer> parseCpuList(String text) {
+		List<Integer> out = new ArrayList<>();
+
+		if (text == null || text.isBlank()) {
+			return out;
+		}
+
+		for (String part : text.trim().split(",")) {
+			String p = part.trim();
+
+			if (p.isEmpty()) {
+				continue;
+			}
+
+			int dash = p.indexOf('-');
+
+			try {
+				if (dash < 0) {
+					out.add(Integer.parseInt(p));
+				} else {
+					int from = Integer.parseInt(p.substring(0, dash).trim());
+					int to = Integer.parseInt(p.substring(dash + 1).trim());
+
+					// A corrupt range should not turn into millions of entries.
+					for (int i = from; i <= to && i - from < 8192; i++) {
+						out.add(i);
+					}
+				}
+			} catch (NumberFormatException ignored) {
+				// Skip malformed ranges.
+			}
+		}
+
+		out.sort(Comparator.naturalOrder());
+		return out;
 	}
 
 	public String describe() {
@@ -142,6 +250,10 @@ public final class CpuTopology {
 
 		if (smt()) {
 			sb.append(", SMT");
+		}
+
+		if (mixedCache()) {
+			sb.append(", mixed L3");
 		}
 
 		sb.append(" [").append(source).append(']');

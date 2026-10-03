@@ -1,0 +1,30 @@
+// Quilt, built with Fabric Loom. Quilt Loader runs intermediary-mapped jars
+// exactly like Fabric Loader, so the toolchain is the same; only the entry point
+// and metadata differ. Fabric Loader stays on the compile classpath because Loom
+// takes its Mixin tooling from there; neither loader is bundled.
+apply from: rootProject.file('gradle/common.gradle')
+
+repositories {
+	maven {
+		name = 'Quilt'
+		url = 'https://maven.quiltmc.org/repository/release/'
+		content { includeGroupAndSubgroups 'org.quiltmc' }
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${minecraft_version}"
+
+	if (isObfuscated) {
+		mappings loom.officialMojangMappings()
+		modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+	} else {
+		implementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
+	}
+
+	compileOnly("org.quiltmc:quilt-loader:${rootProject.quilt_loader_version}") {
+		transitive = false
+	}
+}
+
+ext.hydrogenJar = isObfuscated ? tasks.named('remapJar') : tasks.named('jar')

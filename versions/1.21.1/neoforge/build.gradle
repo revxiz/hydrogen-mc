@@ -1,0 +1,5 @@
+plugins {
+	id 'net.neoforged.moddev'
+}
+
+apply from: rootProject.file('gradle/loaders/neoforge.gradle')

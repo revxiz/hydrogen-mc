@@ -1,25 +1,30 @@
 package dev.hydrogen.mc.render;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.RenderSystem;
 import dev.hydrogen.core.HLog;
 import dev.hydrogen.core.Hydrogen;
+import dev.hydrogen.mc.ClientBridge;
+import dev.hydrogen.mc.compat.IrisCompat;
 import net.minecraft.client.Minecraft;
 
 /**
- * Decoupled dynamic resolution scaling on the Blaze3D GpuDevice path used by
- * 1.21.9+ and 26.x.
+ * Decoupled dynamic resolution scaling on the Blaze3D path used by 1.21.9+ and
+ * 26.x.
  *
- * The world is redirected into a scaled target through the render output
- * overrides, then blitted up into the main target. The HUD is drawn after
- * renderLevel returns and so stays native, exactly as on the OpenGL path.
+ * The world's frame graph imports whatever the game reports as its main target
+ * when the level pass starts. For the length of that pass the scaled target is
+ * swapped in, so terrain, entities, sky, weather and the hand all render into it
+ * with a matching depth buffer. Afterwards the real target is put back and the
+ * world is drawn up into it with a plain linear blit. The HUD is drawn after
+ * that and stays native, exactly as on the OpenGL path.
  *
- * This backend is opt-in. The GL path has been in use for years, while this one
- * rides an API that is still changing between snapshots, so it stays behind
- * drs.allowNewBlaze3d until a user asks for it.
+ * This works through Mojang's own render abstraction, so it does not care which
+ * graphics API is underneath. It stays behind drs.allowNewBlaze3d because the
+ * abstraction keeps changing between releases.
  */
 public final class RenderScaler {
 	private static RenderTarget target;
+	private static RenderTarget real;
 	private static int targetWidth;
 	private static int targetHeight;
 	private static boolean redirecting;
@@ -32,26 +37,38 @@ public final class RenderScaler {
 		return redirecting;
 	}
 
+	/** The target the world should draw into right now, used by hooks that cache it. */
+	public static RenderTarget currentMain(RenderTarget fallback) {
+		return redirecting && target != null ? target : fallback;
+	}
+
 	public static void begin(Minecraft mc, Hydrogen h) {
-		redirecting = false;
+		ensureRestored(mc);
 
-		if (broken || !h.enabled() || !h.compat().allowFramebufferScaling()) {
-			return;
-		}
-
-		if (!h.config().bool("drs.allowNewBlaze3d")) {
-			if (h.resolution().scaling()) {
-				HLog.once("drs-modern",
-						"Hydrogen: viewport scaling is opt-in on this Minecraft version, "
-								+ "set drs.allowNewBlaze3d=true in config/hydrogen.properties to enable it");
-			}
-
+		if (broken || !h.enabled() || h.compat().vulkanMod()) {
 			return;
 		}
 
 		double scale = h.resolution().scale();
 
 		if (scale >= 0.999D) {
+			return;
+		}
+
+		if (!h.config().bool("drs.allowNewBlaze3d")) {
+			HLog.once("drs-modern",
+					"Hydrogen: viewport scaling is opt-in on this Minecraft version, "
+							+ "set drs.allowNewBlaze3d=true in config/hydrogen.properties to enable it");
+			return;
+		}
+
+		if (ClientBridge.fabulous(mc)) {
+			HLog.once("drs-fabulous", "Hydrogen: resolution scaling pauses while improved transparency is on");
+			return;
+		}
+
+		if (IrisCompat.shadersActive()) {
+			HLog.once("drs-iris", "Hydrogen: resolution scaling pauses while an Iris shader pack is active");
 			return;
 		}
 
@@ -70,11 +87,11 @@ public final class RenderScaler {
 				targetHeight = hgt;
 			}
 
-			RenderSystem.outputColorTextureOverride = target.getColorTextureView();
-			RenderSystem.outputDepthTextureOverride = target.getDepthTextureView();
+			real = main;
+			ModernRenderBridge.setMainTarget(mc, target);
 			redirecting = true;
 		} catch (Throwable t) {
-			fail(t);
+			fail(mc, t);
 		}
 	}
 
@@ -86,19 +103,35 @@ public final class RenderScaler {
 		redirecting = false;
 
 		try {
-			RenderSystem.outputColorTextureOverride = null;
-			RenderSystem.outputDepthTextureOverride = null;
-			ModernRenderBridge.upscale(target, ModernRenderBridge.mainTarget(mc));
+			ModernRenderBridge.setMainTarget(mc, real);
+			ModernRenderBridge.upscale(target, real, h.config().bool("drs.linearUpscale"));
 		} catch (Throwable t) {
-			fail(t);
+			fail(mc, t);
 		}
 	}
 
-	private static void fail(Throwable t) {
-		broken = true;
+	/**
+	 * Puts the real main target back if a world render threw before {@link #end}.
+	 * Called at the start of every frame, so a failure costs at most one frame.
+	 */
+	public static void ensureRestored(Minecraft mc) {
+		if (!redirecting) {
+			return;
+		}
+
 		redirecting = false;
-		RenderSystem.outputColorTextureOverride = null;
-		RenderSystem.outputDepthTextureOverride = null;
+
+		try {
+			ModernRenderBridge.setMainTarget(mc, real);
+		} catch (Throwable ignored) {
+			// Nothing more to do.
+		}
+	}
+
+	private static void fail(Minecraft mc, Throwable t) {
+		broken = true;
+		ensureRestored(mc);
+		redirecting = false;
 		HLog.warnOnce("drs", "Hydrogen: resolution scaling failed, staying at native", t);
 	}
 
