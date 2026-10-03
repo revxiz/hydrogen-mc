@@ -20,7 +20,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * shouldRender, such as beacons, keep their own logic.
  *
  * The block entity's own state is untouched. This only decides whether a frame
- * draws it. The descriptor of shouldRender is identical on every branch.
+ * draws it. On 1.21.11 and later the dispatcher builds render states instead of
+ * drawing directly, so the renderer interface itself is the stable hook. The
+ * 1.20.1 and 1.21.1 jars hook the dispatcher instead, because the Mixin that
+ * Forge 47 ships cannot inject into interfaces.
  */
 @Mixin(BlockEntityRenderer.class)
 public interface BlockEntityCullMixin {

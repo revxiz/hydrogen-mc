@@ -66,6 +66,16 @@ def quiltVersions = { String fabricRange ->
 	parts.size() == 1 ? parts[0] : "{ \"all\": [${parts.join(', ')}] }"
 }
 
+// Forge reads pack.mcmeta from every mod jar that carries assets. 1.20.1 shows a
+// warning screen without one; later releases log an error. The game checks the
+// file both as a resource pack and as a data pack, so like Forge's own jar it
+// declares the data pack format, which from 82 (1.21.9) satisfies both checks
+// with the min/max pair alone.
+def packFormatFields = { String format ->
+	int major = (format ?: '15') as int
+	major >= 82 ? "\"min_format\": ${major},\n\t\t\"max_format\": ${major}" : "\"pack_format\": ${major}"
+}
+
 def meta = [
 	version           : project.version,
 	mod_id            : rootProject.mod_id,
@@ -86,6 +96,7 @@ def meta = [
 	forge_loader_range: project.findProperty('forge_loader_range') ?: '[0,)',
 	forge_mc_range    : project.findProperty('forge_mc_range') ?: '[0,)',
 	neoforge_dep_range: project.findProperty('neoforge_dep_range') ?: '[0,)',
+	pack_format_fields: packFormatFields(project.findProperty('mod_pack_format') as String),
 ]
 
 processResources {
@@ -93,7 +104,7 @@ processResources {
 	filteringCharset = 'UTF-8'
 
 	filesMatching(['fabric.mod.json', 'quilt.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml',
-			'*.mixins.json']) {
+			'*.mixins.json', 'pack.mcmeta']) {
 		expand(meta)
 	}
 }

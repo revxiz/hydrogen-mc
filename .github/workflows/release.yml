@@ -37,6 +37,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .gradle/loom-cache
+            .gradle/mavenizer
+          key: mc-${{ matrix.loader }}-${{ hashFiles('gradle.properties', 'versions/*/mc.properties') }}
+          restore-keys: mc-${{ matrix.loader }}-
+
       - name: Build every ${{ matrix.loader }} jar
         run: ./gradlew collectJars -Ploader=${{ matrix.loader }} --no-daemon
 

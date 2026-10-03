@@ -29,6 +29,19 @@ gradle.projectsEvaluated {
 	}
 }
 
+// Copies the collected jars into the committed dist/<loader>/ folders that the
+// README links to. A Copy rather than a Sync, so a narrowed build (-Ploader=forge)
+// only replaces its own jars and leaves the other loaders' alone.
+tasks.register('updateDist', Copy) {
+	group = 'build'
+	description = 'Refreshes dist/<loader>/ from build/dist.'
+	from collectJars
+	into layout.projectDirectory.dir('dist')
+	// hydrogen-<loader>-<minecraft>-<version>.jar
+	eachFile { f -> f.path = "${f.name.split('-')[1]}/${f.name}" }
+	includeEmptyDirs = false
+}
+
 // Narrow either task with -Ploader=fabric,quilt and -Pmc=1.21.1; see settings.gradle.
 tasks.register('publishLoader') {
 	group = 'publishing'

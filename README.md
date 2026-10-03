@@ -24,9 +24,8 @@ numbers are right for one machine.
 Hydrogen ships none of them. It asks your OS what CPU you have, asks the driver
 how much video memory exists, asks the window system (GLFW, or SDL3 from 26.3)
 what your monitor runs at, then watches your game for a few seconds and works
-out its own thresholds from what it saw. A
-4K 60 Hz desktop and a 1080p 240 Hz laptop end up with different settings, and
-nobody opens a config file.
+out its own thresholds from what it saw. A 4K 60 Hz desktop and a 1080p 240 Hz
+laptop end up with different settings, and nobody opens a config file.
 
 It needs nothing else installed. No Fabric API, no Quilt Standard Libraries, no
 config library.
@@ -337,6 +336,7 @@ There's no in-game settings screen yet, only the config file.
 ./gradlew collectJars -Ploader=fabric       # one loader
 ./gradlew collectJars -Pmc=26.3             # one Minecraft branch
 ./gradlew :neoforge-1.21.1:build            # one jar
+./gradlew updateDist                        # refresh the jars in dist/<loader>/
 ```
 
 You need JDK 25 to run Gradle. Each branch compiles with its own toolchain (17,
@@ -347,7 +347,8 @@ You need JDK 25 to run Gradle. Each branch compiles with its own toolchain (17,
 
 ```
 core/                 plain Java. Policy, maths and the platform interface. Unit tested.
-mcshared/             LWJGL only: native calls, GPU and display probes, the boot path.
+mcshared/             LWJGL only: native calls, the GPU probe, the boot path.
+mcwindow/glfw|sdl/    display probe: GLFW up to 26.2, SDL3 on 26.3
 mccommon/             Minecraft code that is identical on every version.
 mclegacy/             1.20.1 and 1.21.1   (OpenGL render targets)
 mcmodern/             1.21.11 to 26.3     (Blaze3D and renderpearl)
