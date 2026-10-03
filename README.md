@@ -22,8 +22,9 @@ time at 16 ms, evict textures at 2 GB, cull anything past 64 blocks. Those
 numbers are right for one machine.
 
 Hydrogen ships none of them. It asks your OS what CPU you have, asks the driver
-how much video memory exists, asks GLFW what your monitor runs at, then watches
-your game for a few seconds and works out its own thresholds from what it saw. A
+how much video memory exists, asks the window system (GLFW, or SDL3 from 26.3)
+what your monitor runs at, then watches your game for a few seconds and works
+out its own thresholds from what it saw. A
 4K 60 Hz desktop and a 1080p 240 Hz laptop end up with different settings, and
 nobody opens a config file.
 

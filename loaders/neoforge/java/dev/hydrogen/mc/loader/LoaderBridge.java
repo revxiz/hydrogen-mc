@@ -1,5 +1,6 @@
 package dev.hydrogen.mc.loader;
 
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.fml.loading.LoadingModList;
@@ -29,7 +30,24 @@ public final class LoaderBridge {
 		}
 	}
 
+	/**
+	 * NeoForge 21.1 exposes the side as the static field {@code dist}; later
+	 * releases replaced it with {@code getDist()}. One jar per branch still reads
+	 * it reflectively so a loader update inside the branch cannot break it.
+	 */
 	public static boolean physicalClient() {
-		return FMLEnvironment.getDist().isClient();
+		try {
+			Object dist;
+
+			try {
+				dist = FMLEnvironment.class.getMethod("getDist").invoke(null);
+			} catch (NoSuchMethodException e) {
+				dist = FMLEnvironment.class.getField("dist").get(null);
+			}
+
+			return dist == Dist.CLIENT;
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return LoaderBridge.class.getClassLoader().getResource("net/minecraft/client/Minecraft.class") != null;
+		}
 	}
 }

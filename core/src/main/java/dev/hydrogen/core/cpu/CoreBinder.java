@@ -132,9 +132,11 @@ public final class CoreBinder {
 
 		plan = new Plan(Collections.unmodifiableMap(masks), Collections.unmodifiableMap(text),
 				CpuTopology.mask(primary, span), CpuTopology.mask(worker, span), CpuTopology.mask(topo.cpus(), span));
+		String previous = note;
 		note = (dedicated ? "server=" : "render=") + describe(primary) + " workers=" + describe(worker);
 
-		if (config.bool("log.verbose")) {
+		// Rebuilt once graphics are up; only worth a line when the answer moved.
+		if (config.bool("log.verbose") && !note.equals(previous)) {
 			HLog.LOG.info("Hydrogen affinity plan: {}", note);
 		}
 	}

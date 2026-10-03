@@ -65,8 +65,8 @@ right for one machine, and it probably isn't yours.
 Hydrogen ships none of them.
 
 It asks Windows, Linux or macOS to describe your CPU. It asks your graphics
-driver how much VRAM actually exists. It asks GLFW what your monitor runs at and
-what your DPI scaling is. Then it watches your game for a few seconds and works
+driver how much VRAM actually exists. It asks the window system (GLFW, or SDL3
+on 26.3) what your monitor runs at and what your DPI scaling is. Then it watches your game for a few seconds and works
 out every threshold from what it measured. A 4K 60 Hz desktop and a 1080p
 240 Hz laptop end up with different settings and nobody opens a config file.
 

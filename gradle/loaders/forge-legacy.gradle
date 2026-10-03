@@ -33,6 +33,13 @@ dependencies {
 	annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
+// The 0.8.5 processor flags every injector in an interface mixin as an error,
+// whatever the target Java level. Forge 47 runs these at JAVA_17, where they are
+// supported, and the refmap entry is still written, so the check is switched off.
+tasks.named('compileJava') {
+	options.compilerArgs << '-AMSG_INJECTOR_IN_INTERFACE=disabled'
+}
+
 jar {
 	manifest.attributes('MixinConfigs': "${rootProject.mod_id}.mixins.json,${rootProject.mod_id}.client.mixins.json")
 }
