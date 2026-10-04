@@ -1,8 +1,10 @@
 package dev.hydrogen.mc;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Camera;
 import net.minecraft.client.GraphicsStatus;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 
 /** Client accessors for 1.20.x and 1.21.1, the OpenGL render-target era. */
@@ -38,5 +40,15 @@ public final class ClientBridge {
 	/** Fabulous draws through full-size targets a scaled world cannot feed. */
 	public static boolean fabulous(Minecraft mc) {
 		return mc.options.graphicsMode().get() == GraphicsStatus.FABULOUS;
+	}
+
+	/** True while the key is held, read straight from the window rather than through key bindings. */
+	public static boolean keyDown(Minecraft mc, int key) {
+		return InputConstants.isKeyDown(mc.getWindow().getWindow(), key);
+	}
+
+	/** A line in the player's own chat. It never reaches a server. */
+	public static void chat(Minecraft mc, String text) {
+		mc.getChatListener().handleSystemMessage(Component.literal(text), false);
 	}
 }

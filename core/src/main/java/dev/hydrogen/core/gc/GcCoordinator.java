@@ -201,6 +201,20 @@ public final class GcCoordinator {
 		collectAsync();
 	}
 
+	/**
+	 * A collection asked for from the console. It goes through the same
+	 * background thread as the automatic ones, so the game never waits for it.
+	 */
+	public boolean collectNow() {
+		if (memory == null || explicitGcDisabled) {
+			return false;
+		}
+
+		lastSweepMs = System.currentTimeMillis();
+		collectAsync();
+		return true;
+	}
+
 	/** The render thread only hands the request over; it never waits on the collector. */
 	private void collectAsync() {
 		if (!collecting.compareAndSet(false, true)) {

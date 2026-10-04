@@ -36,12 +36,12 @@ Pick your loader and Minecraft version, put the jar in `mods/`, and that's it.
 
 | Minecraft | Fabric | Quilt | Forge | NeoForge |
 |---|:---:|:---:|:---:|:---:|
-| **26.3** | [jar](dist/fabric/hydrogen-fabric-26.3-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.3-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-26.3-1.1.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-26.3-1.1.0.jar) ¹ |
-| **26.2** | [jar](dist/fabric/hydrogen-fabric-26.2-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.2-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-26.2-1.1.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-26.2-1.1.0.jar) |
-| **26.1 to 26.1.2** | [jar](dist/fabric/hydrogen-fabric-26.1-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.1-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-26.1-1.1.0.jar) ² | [jar](dist/neoforge/hydrogen-neoforge-26.1-1.1.0.jar) ² |
-| **1.21.11** | [jar](dist/fabric/hydrogen-fabric-1.21.11-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.21.11-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-1.21.11-1.1.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-1.21.11-1.1.0.jar) |
-| **1.21 and 1.21.1** | [jar](dist/fabric/hydrogen-fabric-1.21.1-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.21.1-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-1.21.1-1.1.0.jar) ² | [jar](dist/neoforge/hydrogen-neoforge-1.21.1-1.1.0.jar) ² |
-| **1.20 to 1.20.4** | [jar](dist/fabric/hydrogen-fabric-1.20.1-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.20.1-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-1.20.1-1.1.0.jar) ² | use the Forge jar ³ |
+| **26.3** | [jar](dist/fabric/hydrogen-fabric-26.3-1.2.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.3-1.2.0.jar) | [jar](dist/forge/hydrogen-forge-26.3-1.2.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-26.3-1.2.0.jar) ¹ |
+| **26.2** | [jar](dist/fabric/hydrogen-fabric-26.2-1.2.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.2-1.2.0.jar) | [jar](dist/forge/hydrogen-forge-26.2-1.2.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-26.2-1.2.0.jar) |
+| **26.1 to 26.1.2** | [jar](dist/fabric/hydrogen-fabric-26.1-1.2.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.1-1.2.0.jar) | [jar](dist/forge/hydrogen-forge-26.1-1.2.0.jar) ² | [jar](dist/neoforge/hydrogen-neoforge-26.1-1.2.0.jar) ² |
+| **1.21.11** | [jar](dist/fabric/hydrogen-fabric-1.21.11-1.2.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.21.11-1.2.0.jar) | [jar](dist/forge/hydrogen-forge-1.21.11-1.2.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-1.21.11-1.2.0.jar) |
+| **1.21 and 1.21.1** | [jar](dist/fabric/hydrogen-fabric-1.21.1-1.2.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.21.1-1.2.0.jar) | [jar](dist/forge/hydrogen-forge-1.21.1-1.2.0.jar) ² | [jar](dist/neoforge/hydrogen-neoforge-1.21.1-1.2.0.jar) ² |
+| **1.20 to 1.20.4** | [jar](dist/fabric/hydrogen-fabric-1.20.1-1.2.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.20.1-1.2.0.jar) | [jar](dist/forge/hydrogen-forge-1.20.1-1.2.0.jar) ² | use the Forge jar ³ |
 
 ¹ NeoForge for 26.3 is still in beta.
 ² Forge and NeoForge jars are built for the exact patch release shown in the file
@@ -234,6 +234,68 @@ Hydrogen: tuned to target 13.89ms stall 18.75ms | drs 0.70-1.00 step 0.040 | vra
 That's a GT 1030 at 1440p. Headroom of 0.36 says 144 Hz was never going to
 happen, so the target moved to 72 and resolution scaling took it from there.
 
+## Watch your game from a browser
+
+Hydrogen has a remote console: a web page that shows how the game is running on
+your PC right now, from a phone or a second screen. It's off until you turn it
+on, and it only opens with a code your game makes.
+
+1. In a world, press **Alt + H**. The first time, chat explains what the console
+   sends and asks you to press it again.
+2. A 12-character code appears in chat. Open the console page and type it in.
+   The code works once, for 10 minutes.
+
+The page shows the slowest frames against your screen's target as a running
+trace, with frames per second, memory, world resolution and server tick time
+over the last hour. Warnings and errors from the game log show up as they
+happen. Every Hydrogen feature has a switch, so you can turn one off mid-game
+and watch what changes; switches only last until the game restarts and never
+touch your config file. There are buttons to collect garbage, recalibrate and
+reset world resolution, plus your PC's specs, the mod list and a summary you can
+paste into a bug report.
+
+On a dedicated server there's no chat, so type `hydrogen console on` into the
+server console and the code is printed in the server log. Players can't run or
+see that command.
+
+### What it sends and keeps
+
+While the console is on, the game sends frame times, frames per second, memory,
+world resolution and server tick time; Minecraft, loader, Java and Hydrogen
+versions; the names of your OS, CPU and GPU, your screen size and refresh rate;
+the list of installed mods; and warnings and errors from the game log. Before a
+log line leaves your PC, home folder paths, IP addresses, email addresses, UUIDs
+and your player name are taken out. Set `console.gameLog=false` to send only
+Hydrogen's own warnings.
+
+The console never reads chat, your position, world or server names, your
+Minecraft account, files or screenshots. A warning goes out as the game wrote
+it, minus the details above, so if a mod names a world or server in a warning,
+that name goes too. `console.gameLog=false` avoids that.
+
+The server keeps the last hour of numbers and the last 200 log lines. Turn the
+console off from its page and the game deletes all of it from the server
+straight away. Setting `console.enabled=false` also stops it, and the server
+then deletes what it had after 30 days without hearing from the game.
+
+### Why nobody can open your game
+
+A code is 12 characters from 32 symbols, so there are more than a billion
+billion of them. Each network gets 10 tries every 15 minutes, and a code dies
+after 10 minutes or one use. The game only ever sends the server a SHA-256 hash
+of the code, never the code itself. A linked browser holds a 256-bit key in a
+cookie that page scripts can't read, and every change it makes has to come from
+the console's own page.
+
+A browser can flip the switches listed on the page and press its buttons. That's
+all. The list is checked on the server and again in the game, so even a
+compromised server can't change a config value, run a command or read a file.
+You can see and unlink every browser from the page.
+
+The console runs on Cloudflare Workers. The address a jar talks to is set when
+it's built (`console_url` in `gradle.properties`); if a build has none, Alt+H
+says so, and `console.url` in the config points it at any Hydrogen console.
+
 ## Config
 
 `config/hydrogen.properties` is written on first launch. Nearly everything says
@@ -263,7 +325,8 @@ log.verbose=false
 A comment after a value on the same line works too. When a new version adds
 settings, they're appended and your values are kept. Hydrogen never writes a
 change of its own into this file: if a feature switches itself off after an
-error, that only lasts until you restart.
+error, that only lasts until you restart. The one exception is
+`console.enabled`, which is saved when you turn the console on or off yourself.
 
 ## Two things it deliberately does not do
 
@@ -343,6 +406,7 @@ There's no in-game settings screen yet, only the config file.
 ./gradlew collectJars -Pmc=26.3             # one Minecraft branch
 ./gradlew :neoforge-1.21.1:build            # one jar
 ./gradlew updateDist                        # refresh the jars in dist/<loader>/
+./gradlew collectJars -Pconsole_url=https://your.console   # jars that point at your console
 ```
 
 You need JDK 25 to run Gradle. Each branch compiles with its own toolchain (17,
@@ -365,8 +429,9 @@ gradle/               the shared build scripts, one per loader
 ```
 
 Every loader jar compiles the same sources. The only loader-specific code is a
-small entry class and a bridge that answers three questions: where the config
-folder is, which other mods are loaded, and whether this is a client. All of
+small entry class and a bridge that answers a few questions: where the config
+folder is, which other mods are loaded, whether this is a client, and, for the
+console, which versions are running. All of
 Hydrogen's hooks are mixins, which every loader supports, so there is no event
 API to port.
 
@@ -380,7 +445,8 @@ API to port.
 </details>
 
 Hydrogen bundles no libraries. Native calls go through LWJGL, which the game
-already ships, so each jar is about 180 KB.
+already ships, and the console uses the HTTP client built into Java, so each
+jar is about 230 KB.
 
 ## Licence
 

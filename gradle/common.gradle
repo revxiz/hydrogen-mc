@@ -97,6 +97,7 @@ def meta = [
 	forge_mc_range    : project.findProperty('forge_mc_range') ?: '[0,)',
 	neoforge_dep_range: project.findProperty('neoforge_dep_range') ?: '[0,)',
 	pack_format_fields: packFormatFields(project.findProperty('mod_pack_format') as String),
+	console_url       : (rootProject.findProperty('console_url') ?: '').toString().trim(),
 ]
 
 processResources {
@@ -104,7 +105,7 @@ processResources {
 	filteringCharset = 'UTF-8'
 
 	filesMatching(['fabric.mod.json', 'quilt.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml',
-			'*.mixins.json', 'pack.mcmeta']) {
+			'*.mixins.json', 'pack.mcmeta', 'dev/hydrogen/build.properties']) {
 		expand(meta)
 	}
 }

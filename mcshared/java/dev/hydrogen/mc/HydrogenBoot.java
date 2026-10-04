@@ -4,6 +4,7 @@ import dev.hydrogen.core.HLog;
 import dev.hydrogen.core.Hydrogen;
 import dev.hydrogen.core.compat.RenderBackend;
 import dev.hydrogen.mc.compat.ModProbe;
+import dev.hydrogen.mc.console.LogTap;
 import dev.hydrogen.mc.loader.LoaderBridge;
 import dev.hydrogen.mc.platform.Platforms;
 
@@ -25,6 +26,9 @@ public final class HydrogenBoot {
 		}
 
 		try {
+			// First, so warnings from the rest of start-up are kept for the console.
+			LogTap.install();
+
 			boolean dedicated = !LoaderBridge.physicalClient();
 			Hydrogen h = Hydrogen.boot(LoaderBridge.configDir().resolve("hydrogen.properties"),
 					Platforms.detect(), dedicated);

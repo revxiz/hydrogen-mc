@@ -4,6 +4,7 @@
 	"package": "dev.hydrogen.mc.mixin",
 	"compatibilityLevel": "${mixin_compat}",${refmap_line}
 	"mixins": [
+		"CommandsMixin",
 		"HopperIdleMixin",
 		"MinecraftServerMixin",
 		"MobAiThrottleMixin"

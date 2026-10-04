@@ -2,12 +2,14 @@ package dev.hydrogen.mc;
 
 import dev.hydrogen.core.HLog;
 import dev.hydrogen.core.Hydrogen;
+import dev.hydrogen.core.console.ConsoleClient;
 import dev.hydrogen.core.cpu.ThreadRole;
 import dev.hydrogen.core.gpu.EvictionController;
 import dev.hydrogen.core.gpu.VramSnapshot;
 import dev.hydrogen.core.hw.DisplayInfo;
 import dev.hydrogen.core.hw.GpuInfo;
 import dev.hydrogen.mc.gl.DisplayProbe;
+import dev.hydrogen.mc.console.ClientConsole;
 import dev.hydrogen.mc.gl.VramProbe;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
@@ -29,6 +31,7 @@ public final class HydrogenClient {
 
 	private boolean graphicsReady;
 	private boolean failed;
+	private boolean consoleFailed;
 	private long lastDisplayCheckMs;
 	private DisplayInfo lastDisplay = DisplayInfo.UNKNOWN;
 	private boolean wasInWorld;
@@ -47,6 +50,16 @@ public final class HydrogenClient {
 	}
 
 	private void tick(Minecraft mc) {
+		// Before the master switch below, so a browser can turn Hydrogen back on.
+		if (!consoleFailed) {
+			try {
+				ClientConsole.tick(mc);
+			} catch (Throwable t) {
+				consoleFailed = true;
+				HLog.warnOnce("console-tick", "Hydrogen console: client hook failed, the console is off for this session", t);
+			}
+		}
+
 		Hydrogen h = Hydrogen.get();
 
 		if (h == null || failed || !h.enabled()) {
@@ -89,6 +102,12 @@ public final class HydrogenClient {
 
 		lastDisplay = display;
 		graphicsReady = true;
+
+		ConsoleClient console = ConsoleClient.get();
+
+		if (console != null) {
+			console.infoChanged();
+		}
 	}
 
 	private DisplayInfo probeDisplay(Minecraft mc) {

@@ -1,7 +1,7 @@
 # Modrinth listing copy
 
 Everything below is ready to paste. Section 1 is the project settings, section 2
-is the page body, section 3 is the changelog for the 1.1.0 upload.
+is the page body, section 3 is the changelog for the 1.2.0 upload.
 
 ---
 
@@ -39,20 +39,20 @@ thread affinity, VRAM, Sodium compatible
 
 | File | Loaders | Game versions |
 |---|---|---|
-| `hydrogen-fabric-1.20.1-1.1.0.jar` | Fabric | 1.20 to 1.20.4 |
-| `hydrogen-quilt-1.20.1-1.1.0.jar` | Quilt | 1.20 to 1.20.4 |
-| `hydrogen-forge-1.20.1-1.1.0.jar` | Forge, NeoForge | 1.20.1 |
-| `hydrogen-fabric-1.21.1-1.1.0.jar` | Fabric | 1.21, 1.21.1 |
-| `hydrogen-quilt-1.21.1-1.1.0.jar` | Quilt | 1.21, 1.21.1 |
-| `hydrogen-forge-1.21.1-1.1.0.jar` | Forge | 1.21.1 |
-| `hydrogen-neoforge-1.21.1-1.1.0.jar` | NeoForge | 1.21.1 |
-| `hydrogen-<loader>-1.21.11-1.1.0.jar` | one each | 1.21.11 |
-| `hydrogen-fabric-26.1-1.1.0.jar` | Fabric | 26.1, 26.1.1, 26.1.2 |
-| `hydrogen-quilt-26.1-1.1.0.jar` | Quilt | 26.1, 26.1.1, 26.1.2 |
-| `hydrogen-forge-26.1-1.1.0.jar` | Forge | 26.1.2 |
-| `hydrogen-neoforge-26.1-1.1.0.jar` | NeoForge | 26.1.2 |
-| `hydrogen-<loader>-26.2-1.1.0.jar` | one each | 26.2 |
-| `hydrogen-<loader>-26.3-1.1.0.jar` | one each | 26.3 |
+| `hydrogen-fabric-1.20.1-1.2.0.jar` | Fabric | 1.20 to 1.20.4 |
+| `hydrogen-quilt-1.20.1-1.2.0.jar` | Quilt | 1.20 to 1.20.4 |
+| `hydrogen-forge-1.20.1-1.2.0.jar` | Forge, NeoForge | 1.20.1 |
+| `hydrogen-fabric-1.21.1-1.2.0.jar` | Fabric | 1.21, 1.21.1 |
+| `hydrogen-quilt-1.21.1-1.2.0.jar` | Quilt | 1.21, 1.21.1 |
+| `hydrogen-forge-1.21.1-1.2.0.jar` | Forge | 1.21.1 |
+| `hydrogen-neoforge-1.21.1-1.2.0.jar` | NeoForge | 1.21.1 |
+| `hydrogen-<loader>-1.21.11-1.2.0.jar` | one each | 1.21.11 |
+| `hydrogen-fabric-26.1-1.2.0.jar` | Fabric | 26.1, 26.1.1, 26.1.2 |
+| `hydrogen-quilt-26.1-1.2.0.jar` | Quilt | 26.1, 26.1.1, 26.1.2 |
+| `hydrogen-forge-26.1-1.2.0.jar` | Forge | 26.1.2 |
+| `hydrogen-neoforge-26.1-1.2.0.jar` | NeoForge | 26.1.2 |
+| `hydrogen-<loader>-26.2-1.2.0.jar` | one each | 26.2 |
+| `hydrogen-<loader>-26.3-1.2.0.jar` | one each | 26.3 |
 
 ---
 
@@ -116,6 +116,38 @@ passive mobs beyond 48 blocks can run AI one tick in four (villagers and traders
 excluded), and empty hoppers can thin their search for dropped items without
 changing hopper timing.
 
+### Watch your game from a browser
+
+Press **Alt + H** in a world and Hydrogen shows a one-time code in chat. Type it
+into the console page on your phone or a second screen and you get a live view
+of the game: the slowest frames against your screen's target, frames per
+second, memory, world resolution and server tick time, plus warnings and errors
+from the game log as they happen. Every Hydrogen feature has a switch, so you
+can turn one off mid-game and see what it was doing for you. On a dedicated
+server, type `hydrogen console on` into the server console instead.
+
+The console is off until you turn it on, and the first press explains what it
+sends before anything leaves your PC.
+
+**What it sends while on:** frame times, FPS, memory, world resolution and tick
+time; Minecraft, loader, Java and Hydrogen versions; your OS, CPU and GPU names,
+screen size and refresh rate; the mod list; and warnings and errors from the
+game log with home folder paths, IP addresses, email addresses, UUIDs and your
+player name removed first. `console.gameLog=false` limits the log to Hydrogen's
+own lines. It never reads chat, your position, world or server names, your
+account, files or screenshots, though a warning that a mod wrote with a world
+or server name in it goes out as written.
+
+**What it keeps:** the last hour of numbers and the last 200 log lines.
+Turning the console off from its page deletes everything on the server at once,
+and a PC that stays silent for 30 days is deleted automatically.
+
+**Why nobody else can get in:** codes are 12 characters from 32 symbols, last
+10 minutes, work once, and each network gets 10 tries every 15 minutes. The
+server only stores a hash of the code. A linked browser can flip the listed
+switches and press the listed buttons, and the game checks that list again
+before acting, so nothing else in your game or config can be reached.
+
 ### Works with what you already run
 
 Sodium, Embeddium, Iris, Oculus and C2ME all work. With Sodium installed,
@@ -148,7 +180,7 @@ between releases. On 1.20.x and 1.21.1 it's on by default.
 On 26.3's Vulkan backend the VRAM features stay off, because memory readings
 come from OpenGL extensions.
 
-There's no settings screen yet, only the config file.
+There's no settings screen yet, only the config file and the console page.
 
 If thread pinning is denied, or the power governor isn't writable, or your
 driver reports no VRAM extension, the affected feature steps back quietly and
@@ -158,7 +190,27 @@ MIT licensed. Source and issues on GitHub.
 
 ---
 
-## 3. Changelog for version 1.1.0
+## 3. Changelog for version 1.2.0
+
+```
+New:
+- Remote console. Press Alt+H in a world to get a one-time code, type it into the
+  console page, and watch frame times, FPS, memory, world resolution, server tick
+  time and the game's warnings live from any browser. Each Hydrogen feature gets
+  a switch for the session, and there are buttons to collect garbage,
+  recalibrate and reset world resolution. Off until you turn it on.
+- Dedicated servers: "hydrogen console on" in the server console prints a code
+  to the server log. Players can't run or see the command.
+- Turning Hydrogen's master switch off mid-game now also hands back CPU clocks
+  and resolution straight away, and keeps measuring so the difference shows.
+
+Privacy:
+- Nothing is sent unless you turn the console on. Log lines are scrubbed of home
+  folders, IP and email addresses, UUIDs and your player name before they leave.
+  Turning the console off from its page deletes this PC's data from the server.
+```
+
+## 4. Changelog for version 1.1.0
 
 ```
 Now on Fabric, Quilt, Forge and NeoForge, for Minecraft 1.20 to 26.3.

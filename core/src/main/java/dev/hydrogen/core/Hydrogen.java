@@ -61,6 +61,7 @@ public final class Hydrogen {
 	private long lastControlMs;
 	private volatile long lastFrameNanos;
 	private double appliedScale = 1.0D;
+	private boolean active = true;
 
 	private Hydrogen(Path configFile, NativePlatform platform, boolean dedicatedServer) {
 		this.config = new HConfig(configFile);
@@ -199,7 +200,7 @@ public final class Hydrogen {
 
 		long now = System.currentTimeMillis();
 
-		if (calibrator.active()) {
+		if (calibrator.active() && enabled()) {
 			// Hold every adaptive feature still so the baseline is honest.
 			calibrator.onFrame(frameNanos, now, gc.heapUsedBytes(), vram.freeKb(), !inWorld || screenOpen);
 			return;
@@ -218,6 +219,21 @@ public final class Hydrogen {
 		budget.refresh();
 		stats = timeline.snapshot(budget.stallMs());
 
+		// Switched off at runtime, for example from the console: hand back clocks
+		// and resolution once, and keep measuring so the difference shows.
+		if (!enabled()) {
+			if (active) {
+				active = false;
+				governor.release(now);
+				resolution.reset();
+				appliedScale = 1.0D;
+				culler.updateProjection(hardware.display(), 1.0D, hardware.fovDegrees());
+			}
+
+			return;
+		}
+
+		active = true;
 		governor.update(stats, now);
 		resolution.update(stats, vram, now);
 

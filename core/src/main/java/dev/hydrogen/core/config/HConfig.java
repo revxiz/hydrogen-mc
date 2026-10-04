@@ -131,6 +131,13 @@ public final class HConfig {
 		def("hopper.throttle.enabled", "false",
 				"Thin the item-entity scan of empty hoppers. Pulling from containers is never delayed.");
 		def("hopper.throttle.interval", "4", "Scan one tick in this many while idle.");
+
+		// Remote console. Off until the player turns it on with Alt+H in game.
+		def("console.enabled", "false",
+				"Watch this game from a browser. Alt+H in game turns it on and shows a one-time pairing code.");
+		def("console.url", AUTO, "auto = the console this build was made for. Only https addresses are accepted.");
+		def("console.gameLog", "true",
+				"Also send warnings from Minecraft and other mods, not only Hydrogen's own. Personal details are removed first.");
 	}
 
 	private static void def(String k, String v, String note) {

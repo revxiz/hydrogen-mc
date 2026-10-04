@@ -6,6 +6,8 @@ import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.fml.loading.LoadingModList;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /** The few loader facts Hydrogen needs, answered by NeoForge's FancyModLoader. */
 public final class LoaderBridge {
@@ -49,5 +51,81 @@ public final class LoaderBridge {
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			return LoaderBridge.class.getClassLoader().getResource("net/minecraft/client/Minecraft.class") != null;
 		}
+	}
+
+	public static String loaderVersion() {
+		for (String[] m : modInfo()) {
+			if (m[0].equals("neoforge")) {
+				return m[1];
+			}
+		}
+
+		return null;
+	}
+
+	public static String minecraftVersion() {
+		for (String[] m : modInfo()) {
+			if (m[0].equals("minecraft")) {
+				return m[1];
+			}
+		}
+
+		return null;
+	}
+
+	public static List<String> mods() {
+		List<String> out = new ArrayList<>();
+
+		for (String[] m : modInfo()) {
+			out.add(m[0] + " " + m[1]);
+		}
+
+		out.sort(null);
+		return out;
+	}
+
+	/**
+	 * Id and version of every loaded mod. Read through the public mod info
+	 * interface by reflection, so a change in the loader's own class layout
+	 * between Minecraft branches costs the console its mod list, not the game.
+	 */
+	private static List<String[]> modInfo() {
+		List<String[]> out = new ArrayList<>();
+
+		try {
+			Class<?> listClass = Class.forName("net.neoforged.fml.ModList");
+			Object list = listClass.getMethod("get").invoke(null);
+
+			if (list == null) {
+				return out;
+			}
+
+			for (Object info : (List<?>) listClass.getMethod("getMods").invoke(list)) {
+				Object id = publicCall(info, "getModId");
+				Object version = publicCall(info, "getVersion");
+
+				if (id != null) {
+					out.add(new String[] {String.valueOf(id), String.valueOf(version)});
+				}
+			}
+		} catch (Throwable t) {
+			// Too early, or a loader without ModList; the console just shows no mods.
+		}
+
+		return out;
+	}
+
+	private static Object publicCall(Object target, String name) throws ReflectiveOperationException {
+		for (Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
+			for (Class<?> i : c.getInterfaces()) {
+				try {
+					return i.getMethod(name).invoke(target);
+				} catch (NoSuchMethodException ignored) {
+					// Try the next interface.
+				}
+			}
+		}
+
+		return target.getClass().getMethod(name).invoke(target);
 	}
 }
