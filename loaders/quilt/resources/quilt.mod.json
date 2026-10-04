@@ -1,0 +1,42 @@
+{
+	"schema_version": 1,
+	"quilt_loader": {
+		"group": "${maven_group}",
+		"id": "${mod_id}",
+		"version": "${version}",
+		"metadata": {
+			"name": "${mod_name}",
+			"description": "${mod_description}",
+			"contributors": {
+				"${mod_authors}": "Owner"
+			},
+			"contact": {
+				"sources": "${mod_source}",
+				"issues": "${mod_issues}"
+			},
+			"license": "${mod_license}",
+			"icon": "assets/hydrogen/icon.png"
+		},
+		"intermediate_mappings": "net.fabricmc:intermediary",
+		"entrypoints": {
+			"pre_launch": "dev.hydrogen.mc.loader.HydrogenQuilt"
+		},
+		"depends": [
+			{
+				"id": "quilt_loader",
+				"versions": "${quilt_loader_range}"
+			},
+			{
+				"id": "minecraft",
+				"versions": ${quilt_mc_versions}
+			}
+		]
+	},
+	"mixin": [
+		"hydrogen.mixins.json",
+		{
+			"config": "hydrogen.client.mixins.json",
+			"environment": "client"
+		}
+	]
+}

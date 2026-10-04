@@ -28,6 +28,7 @@ public final class Calibrator {
 
 	private Phase phase = Phase.IDLE;
 	private long phaseStartMs;
+	private long lastFrameMs;
 	private final double[] samples = new double[MAX_SAMPLES];
 	private int sampleCount;
 
@@ -51,6 +52,7 @@ public final class Calibrator {
 
 		phase = Phase.WARMUP;
 		phaseStartMs = nowMs;
+		lastFrameMs = nowMs;
 		sampleCount = 0;
 		heapGrowthMb = 0.0D;
 		heapUsedLast = 0L;
@@ -101,9 +103,21 @@ public final class Calibrator {
 	 * @param frameNanos    duration of the frame just finished
 	 * @param heapUsedBytes current heap occupancy
 	 * @param vramFreeKb    free video memory, 0 when unknown
+	 * @param held          a screen covers the world (loading, pause, inventory);
+	 *                      the clock stops and nothing is sampled, because those
+	 *                      frames say nothing about how the world renders
 	 */
-	public void onFrame(long frameNanos, long nowMs, long heapUsedBytes, long vramFreeKb) {
+	public void onFrame(long frameNanos, long nowMs, long heapUsedBytes, long vramFreeKb, boolean held) {
 		if (!active()) {
+			return;
+		}
+
+		long sinceLast = nowMs - lastFrameMs;
+		lastFrameMs = nowMs;
+
+		if (held) {
+			phaseStartMs += Math.max(0L, sinceLast);
+			heapUsedLast = 0L;
 			return;
 		}
 

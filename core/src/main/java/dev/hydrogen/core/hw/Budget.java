@@ -17,6 +17,7 @@ public final class Budget {
 	private final HardwareProfile hw;
 
 	private volatile Baseline baseline = Baseline.NONE;
+	private volatile Tuning tuning = Tuning.OFF;
 
 	public Budget(HConfig config, HardwareProfile hw) {
 		this.config = config;
@@ -25,6 +26,47 @@ public final class Budget {
 
 	public void setBaseline(Baseline baseline) {
 		this.baseline = baseline == null ? Baseline.NONE : baseline;
+		refresh();
+	}
+
+	/** Snapshot read by per-object hooks. Never null. */
+	public Tuning tuning() {
+		return tuning;
+	}
+
+	/** Re-resolves the hook snapshot. Cheap enough to call at the control rate. */
+	public Tuning refresh() {
+		double subPixelMin = subPixelMinDistance();
+		double particleMin = config.number("particle.minCullDistance", Math.max(12.0D, subPixelMin * 0.5D));
+		double audioDistance = config.number("audio.cullDistance", Math.max(16.0D, subPixelMin * 1.5D));
+
+		Tuning t = new Tuning(
+				config.bool("enabled"),
+				config.bool("cull.subpixel.enabled"),
+				subPixelThreshold(),
+				subPixelMin,
+				config.bool("cull.blockEntities.enabled"),
+				config.bool("particle.cullPhysics"),
+				config.bool("particle.cullBehindOnly"),
+				particleMin * particleMin,
+				config.bool("audio.enabled"),
+				Math.max(16, (int) config.fixed("audio.poolSize")),
+				clamp(config.fixed("audio.pressureAt"), 0.05D, 1.0D),
+				audioDistance * audioDistance,
+				config.bool("chunk.cone.enabled"),
+				Math.cos(Math.toRadians(coneDegrees() * 0.5D)),
+				conePenalty(),
+				config.bool("chunk.cone.deferBehind"),
+				coneDeferFrameMs(),
+				config.bool("ai.throttle.enabled"),
+				Math.max(16.0D, config.fixed("ai.throttle.distance")),
+				Math.max(2, (int) config.fixed("ai.throttle.interval")),
+				config.bool("hopper.throttle.enabled"),
+				Math.max(2, (int) config.fixed("hopper.throttle.interval")),
+				targetFrameMs());
+
+		tuning = t;
+		return t;
 	}
 
 	public Baseline baseline() {

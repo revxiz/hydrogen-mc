@@ -1,0 +1,47 @@
+// Forge 1.20.1, built with ModDevGradle's legacy Forge plugin. Forge 47 still runs
+// on SRG names, so the jar is reobfuscated and the mixin annotation processor
+// writes a refmap for it. The same jar loads on NeoForge 1.20.1, which is Forge
+// 47 under a new name.
+ext.refmapLine = "\n\t\"refmap\": \"${rootProject.mod_id}.refmap.json\","
+
+apply from: rootProject.file('gradle/common.gradle')
+
+legacyForge {
+	version = "${minecraft_version}-${forge_version}"
+	validateAccessTransformers = false
+
+	runs {
+		client {
+			client()
+		}
+	}
+
+	mods {
+		"${rootProject.mod_id}" {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+mixin {
+	add sourceSets.main, "${rootProject.mod_id}.refmap.json"
+	config "${rootProject.mod_id}.mixins.json"
+	config "${rootProject.mod_id}.client.mixins.json"
+}
+
+dependencies {
+	annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+// The 0.8.5 processor flags every injector in an interface mixin as an error,
+// whatever the target Java level. Forge 47 runs these at JAVA_17, where they are
+// supported, and the refmap entry is still written, so the check is switched off.
+tasks.named('compileJava') {
+	options.compilerArgs << '-AMSG_INJECTOR_IN_INTERFACE=disabled'
+}
+
+jar {
+	manifest.attributes('MixinConfigs': "${rootProject.mod_id}.mixins.json,${rootProject.mod_id}.client.mixins.json")
+}
+
+ext.hydrogenJar = tasks.named('reobfJar')

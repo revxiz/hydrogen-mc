@@ -6,36 +6,72 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to publish, for example v1.0.0'
+        description: 'Tag to publish, for example v1.1.0'
         required: true
-        default: 'v1.0.0'
+        default: 'v1.1.0'
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-  release:
+  jars:
+    name: ${{ matrix.loader }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        loader: [fabric, quilt, forge, neoforge]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 25
+          java-version: |
+            17
+            21
+            25
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
-      - name: Build all branches
-        run: ./gradlew collectJars --no-daemon
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .gradle/loom-cache
+            .gradle/mavenizer
+          key: mc-${{ matrix.loader }}-${{ hashFiles('gradle.properties', 'versions/*/mc.properties') }}
+          restore-keys: mc-${{ matrix.loader }}-
+
+      - name: Build every ${{ matrix.loader }} jar
+        run: ./gradlew collectJars -Ploader=${{ matrix.loader }} --no-daemon
 
       - name: Publish to GitHub Packages
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ./gradlew publishAllPublicationsToGitHubPackagesRepository --no-daemon
+        run: ./gradlew publishLoader -Ploader=${{ matrix.loader }} --no-daemon
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: hydrogen-${{ matrix.loader }}
+          path: build/dist/*.jar
+          if-no-files-found: error
+
+  release:
+    needs: jars
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: hydrogen-*
+          path: dist
+          merge-multiple: true
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -43,15 +79,19 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Hydrogen ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
-          files: build/dist/*.jar
+          files: dist/*.jar
           body: |
-            Built by CI from this commit. One jar per Minecraft branch.
+            Built by CI from this commit. One jar per loader and Minecraft branch,
+            named `hydrogen-<loader>-<minecraft>-<version>.jar`.
 
-            | Jar | Minecraft | Java | Fabric Loader |
-            |---|---|---|---|
-            | `hydrogen-mc1.20.1` | 1.20 - 1.20.6 | 17+ | 0.16.0+ |
-            | `hydrogen-mc1.21.1` | 1.21 - 1.21.1 | 21+ | 0.16.0+ |
-            | `hydrogen-mc1.21.11` | 1.21.9 - 1.21.11 | 21+ | 0.16.0+ |
-            | `hydrogen-mc26.2` | 26.1+ | 25+ | 0.19.3+ |
+            | Minecraft | Fabric | Quilt | Forge | NeoForge |
+            |---|---|---|---|---|
+            | 1.20 to 1.20.4 | yes | yes | 1.20.1 | 1.20.1, use the Forge jar |
+            | 1.21 and 1.21.1 | yes | yes | 1.21.1 | 1.21.1 |
+            | 1.21.11 | yes | yes | yes | yes |
+            | 26.1 to 26.1.2 | yes | yes | 26.1.2 | 26.1.2 |
+            | 26.2 | yes | yes | yes | yes |
+            | 26.3 | yes | yes | yes | yes (beta loader) |
 
-            Requires Fabric API. Client side only.
+            No dependencies. Fabric API, Quilt Standard Libraries and any
+            config library are not needed.

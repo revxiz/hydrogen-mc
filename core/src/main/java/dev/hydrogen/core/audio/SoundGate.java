@@ -1,7 +1,7 @@
 package dev.hydrogen.core.audio;
 
-import dev.hydrogen.core.config.HConfig;
 import dev.hydrogen.core.hw.Budget;
+import dev.hydrogen.core.hw.Tuning;
 
 /**
  * Priority gate for the OpenAL channel pool.
@@ -22,24 +22,22 @@ public final class SoundGate {
 	/** Ambience, music, weather. First to go. */
 	public static final int TIER_AMBIENT = 2;
 
-	private final HConfig config;
 	private final Budget budget;
 
 	private long considered;
 	private long culled;
 	private int peakChannels;
 
-	public SoundGate(HConfig config, Budget budget) {
-		this.config = config;
+	public SoundGate(Budget budget) {
 		this.budget = budget;
 	}
 
 	public boolean enabled() {
-		return config.bool("audio.enabled");
+		return budget.tuning().audio();
 	}
 
 	public int poolSize() {
-		return Math.max(16, (int) config.fixed("audio.poolSize"));
+		return budget.tuning().audioPool();
 	}
 
 	/**
@@ -49,7 +47,9 @@ public final class SoundGate {
 	 * @return true when the sound should be dropped before it reaches the pool
 	 */
 	public boolean shouldCull(int tier, double distanceSq, int activeChannels) {
-		if (!enabled() || tier == TIER_CRITICAL) {
+		Tuning t = budget.tuning();
+
+		if (!t.audio() || tier == TIER_CRITICAL) {
 			return false;
 		}
 
@@ -59,15 +59,13 @@ public final class SoundGate {
 			peakChannels = activeChannels;
 		}
 
-		double load = (double) activeChannels / poolSize();
-		double headroom = config.number("audio.pressureAt", 0.75D);
+		double load = (double) activeChannels / t.audioPool();
 
-		if (load < headroom) {
+		if (load < t.audioPressure()) {
 			return false;
 		}
 
-		double cullDistance = cullDistance();
-		double limitSq = cullDistance * cullDistance;
+		double limitSq = t.audioCullDistanceSq();
 
 		// Ambient goes first. Normal only starts dropping once the pool is nearly gone.
 		if (tier == TIER_NORMAL) {
@@ -86,10 +84,8 @@ public final class SoundGate {
 		return true;
 	}
 
-	/** Derived from render distance so a short view distance culls sooner. */
 	public double cullDistance() {
-		double derived = Math.max(16.0D, budget.subPixelMinDistance() * 1.5D);
-		return config.number("audio.cullDistance", derived);
+		return Math.sqrt(budget.tuning().audioCullDistanceSq());
 	}
 
 	public long considered() {

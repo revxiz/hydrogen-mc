@@ -1,5 +1,6 @@
 package dev.hydrogen.core;
 
+import dev.hydrogen.core.audio.SoundGate;
 import dev.hydrogen.core.chunk.ConePriority;
 import dev.hydrogen.core.compat.CompatState;
 import dev.hydrogen.core.config.HConfig;
@@ -12,15 +13,15 @@ import dev.hydrogen.core.frame.FrameTimeline;
 import dev.hydrogen.core.gc.GcCoordinator;
 import dev.hydrogen.core.gpu.EvictionController;
 import dev.hydrogen.core.gpu.ResolutionController;
-import dev.hydrogen.core.audio.SoundGate;
 import dev.hydrogen.core.gpu.VramSnapshot;
-import dev.hydrogen.core.sim.AiThrottle;
-import dev.hydrogen.core.sim.HopperThrottle;
 import dev.hydrogen.core.hw.Budget;
 import dev.hydrogen.core.hw.DisplayInfo;
 import dev.hydrogen.core.hw.GpuInfo;
 import dev.hydrogen.core.hw.HardwareProfile;
+import dev.hydrogen.core.hw.Tuning;
 import dev.hydrogen.core.platform.NativePlatform;
+import dev.hydrogen.core.sim.AiThrottle;
+import dev.hydrogen.core.sim.HopperThrottle;
 import dev.hydrogen.core.tune.Calibrator;
 
 import java.nio.file.Path;
@@ -34,6 +35,8 @@ public final class Hydrogen {
 
 	private final HConfig config;
 	private final NativePlatform platform;
+	private final Path stateFile;
+	private final boolean dedicatedServer;
 	private final HardwareProfile hardware = new HardwareProfile();
 	private final CompatState compat = new CompatState();
 	private final Budget budget;
@@ -56,12 +59,14 @@ public final class Hydrogen {
 	private volatile EvictionController.Action pendingEviction = EvictionController.Action.NONE;
 
 	private long lastControlMs;
-	private long lastFrameNanos;
+	private volatile long lastFrameNanos;
 	private double appliedScale = 1.0D;
 
-	private Hydrogen(Path configFile, NativePlatform platform) {
+	private Hydrogen(Path configFile, NativePlatform platform, boolean dedicatedServer) {
 		this.config = new HConfig(configFile);
 		this.platform = platform;
+		this.dedicatedServer = dedicatedServer;
+		this.stateFile = configFile == null ? null : configFile.resolveSibling("hydrogen-restore.state");
 		this.budget = new Budget(config, hardware);
 		this.calibrator = new Calibrator(config, budget);
 		this.binder = new CoreBinder(platform, config, budget);
@@ -69,14 +74,19 @@ public final class Hydrogen {
 		this.gc = new GcCoordinator(config, budget);
 		this.resolution = new ResolutionController(config, budget);
 		this.eviction = new EvictionController(config, budget);
-		this.culler = new SubPixelCuller(config, budget);
-		this.cone = new ConePriority(config, budget);
-		this.soundGate = new SoundGate(config, budget);
-		this.aiThrottle = new AiThrottle(config);
-		this.hopperThrottle = new HopperThrottle(config);
+		this.culler = new SubPixelCuller(budget);
+		this.cone = new ConePriority(budget);
+		this.soundGate = new SoundGate(budget);
+		this.aiThrottle = new AiThrottle(budget);
+		this.hopperThrottle = new HopperThrottle(budget);
 	}
 
-	public static Hydrogen boot(Path configFile, NativePlatform platform) {
+	/**
+	 * @param configFile      config/hydrogen.properties
+	 * @param platform        native layer for this OS
+	 * @param dedicatedServer true when no client will ever exist in this process
+	 */
+	public static Hydrogen boot(Path configFile, NativePlatform platform, boolean dedicatedServer) {
 		Hydrogen h = instance;
 
 		if (h == null) {
@@ -84,9 +94,9 @@ public final class Hydrogen {
 				h = instance;
 
 				if (h == null) {
-					h = new Hydrogen(configFile, platform);
-					instance = h;
+					h = new Hydrogen(configFile, platform, dedicatedServer);
 					h.start();
+					instance = h;
 				}
 			}
 		}
@@ -101,24 +111,37 @@ public final class Hydrogen {
 	private void start() {
 		hardware.setCpu(platform.topology());
 		hardware.refreshHeap();
-		binder.buildPlan();
+		budget.refresh();
 
-		HLog.LOG.info("Hydrogen on {} | {}", platform.name(), hardware.cpu().describe());
-
-		if (!platform.available()) {
-			HLog.once("no-native",
-					"Hydrogen: native scheduling calls unavailable, using JVM-level priorities only");
+		// A previous session killed while boosted left the power plan or governor
+		// changed. Put it back before anything else touches it.
+		if (stateFile != null) {
+			platform.recoverState(stateFile);
 		}
+
+		binder.buildPlan(dedicatedServer);
+
+		// When native calls are missing, the platform layer has already said why.
+		HLog.LOG.info("Hydrogen on {} | {}", platform.name(), hardware.cpu().describe());
 
 		if (config.bool("cpu.priority.native")) {
 			platform.setProcessPriority(NativePlatform.PRIORITY_HIGH);
+		}
+
+		if (config.bool("cpu.governor.enabled") && platform.disablePowerThrottling() && config.bool("log.verbose")) {
+			HLog.LOG.info("Hydrogen: opted out of OS power throttling for this process");
 		}
 
 		gc.install();
 	}
 
 	public boolean enabled() {
-		return config.bool("enabled");
+		return budget.tuning().enabled();
+	}
+
+	/** Hook snapshot. Hot paths read this instead of the config. */
+	public Tuning tuning() {
+		return budget.tuning();
 	}
 
 	/** Called after the GL context exists and the window is known. */
@@ -128,34 +151,49 @@ public final class Hydrogen {
 		compat.setBackend(gpu.backend());
 		compat.setGpu(gpu.vendor(), gpu.renderer());
 		culler.updateProjection(display, resolution.scale(), hardware.fovDegrees());
-		binder.buildPlan();
+		binder.buildPlan(dedicatedServer);
+		budget.refresh();
 		HLog.LOG.info("Hydrogen: {} | {}", gpu.describe(), display.describe());
-		HLog.LOG.info("Hydrogen: {}", budget.describe());
+		HLog.LOG.info("Hydrogen: {} | gc {}", budget.describe(), gc.collector());
 	}
 
-	public void onDisplayChanged(DisplayInfo display) {
+	/**
+	 * @param display  freshly probed display
+	 * @param geometry the framebuffer size or refresh rate changed, as opposed to
+	 *                 only the frame limiter or vsync setting
+	 */
+	public void onDisplayChanged(DisplayInfo display, boolean geometry) {
 		hardware.setDisplay(display);
 		culler.updateProjection(display, resolution.scale(), hardware.fovDegrees());
-		calibrator.onResize(System.currentTimeMillis());
+		budget.refresh();
+
+		if (geometry) {
+			calibrator.onResize(System.currentTimeMillis());
+		}
 	}
 
 	public void onWorldJoin() {
 		resolution.reset();
 		timeline.reset();
+		eviction.clearCap();
 		calibrator.request(System.currentTimeMillis());
 	}
 
 	public void onWorldLeave() {
 		calibrator.abort();
 		resolution.reset();
+		eviction.clearCap();
+		governor.release(System.currentTimeMillis());
 	}
 
 	/**
 	 * Called at the end of every rendered frame from the render thread.
 	 *
 	 * @param frameNanos wall time the frame took
+	 * @param inWorld    a level is loaded; menus alone never boost clocks or scale anything
+	 * @param screenOpen a screen covers the world, so calibration should not sample
 	 */
-	public void onFrameEnd(long frameNanos) {
+	public void onFrameEnd(long frameNanos, boolean inWorld, boolean screenOpen) {
 		lastFrameNanos = frameNanos;
 		timeline.push(frameNanos);
 
@@ -163,7 +201,11 @@ public final class Hydrogen {
 
 		if (calibrator.active()) {
 			// Hold every adaptive feature still so the baseline is honest.
-			calibrator.onFrame(frameNanos, now, gc.heapUsedBytes(), vram.freeKb());
+			calibrator.onFrame(frameNanos, now, gc.heapUsedBytes(), vram.freeKb(), !inWorld || screenOpen);
+			return;
+		}
+
+		if (!inWorld) {
 			return;
 		}
 
@@ -173,6 +215,7 @@ public final class Hydrogen {
 		}
 
 		lastControlMs = now;
+		budget.refresh();
 		stats = timeline.snapshot(budget.stallMs());
 
 		governor.update(stats, now);
@@ -181,6 +224,10 @@ public final class Hydrogen {
 		if (Math.abs(resolution.scale() - appliedScale) > 1.0E-4D) {
 			appliedScale = resolution.scale();
 			culler.updateProjection(hardware.display(), appliedScale, hardware.fovDegrees());
+
+			if (config.bool("log.verbose")) {
+				HLog.LOG.info("Hydrogen: world scale {}% ({})", Math.round(appliedScale * 100.0D), resolution.reason());
+			}
 		}
 
 		EvictionController.Action action = eviction.decide(vram, now);
@@ -203,6 +250,10 @@ public final class Hydrogen {
 
 	public void bindCurrentThread(ThreadRole role) {
 		binder.bindCurrent(role);
+
+		if (role == (dedicatedServer ? ThreadRole.SERVER : ThreadRole.RENDER)) {
+			binder.startSweeper();
+		}
 	}
 
 	public void setVram(VramSnapshot snapshot) {
@@ -210,13 +261,17 @@ public final class Hydrogen {
 	}
 
 	public void shutdown() {
+		binder.stopSweeper();
 		governor.shutdown();
 		gc.shutdown();
 		platform.setProcessPriority(NativePlatform.PRIORITY_NORMAL);
-		config.save();
-		HLog.LOG.info("Hydrogen stopped: {} clock switches, {} DRS downshifts, {} GC sweeps, {} MB VRAM released",
+		HLog.LOG.info("Hydrogen stopped: {} clock switches, {} DRS downshifts, {} GC requests, {} textures released",
 				governor.switchCount(), resolution.downshifts(), gc.stats().scheduledSweeps(),
-				eviction.releasedKb() / 1024L);
+				eviction.releasedTextures());
+	}
+
+	public boolean dedicatedServer() {
+		return dedicatedServer;
 	}
 
 	public HConfig config() {

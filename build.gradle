@@ -7,15 +7,46 @@ allprojects {
 	version = project.mod_version
 }
 
-// Collects every branch jar into build/dist for release.
-tasks.register('collectJars', Copy) {
-	subprojects.findAll { it.name.startsWith('mc') }.each { p ->
-		dependsOn "${p.path}:build"
-		from(p.layout.buildDirectory.dir('libs')) {
-			include '*.jar'
-			exclude '*-sources.jar'
-			exclude '*-dev.jar'
+def loaderProjects = subprojects.findAll { it.name != 'core' }
+
+// Collects every finished loader jar into build/dist, one file per loader and
+// Minecraft branch, ready for a release.
+def collectJars = tasks.register('collectJars', Sync) {
+	group = 'build'
+	description = 'Builds every loader and Minecraft branch and gathers the jars in build/dist.'
+	into layout.buildDirectory.dir('dist')
+}
+
+// Each loader script exposes its final (remapped or reobfuscated) jar as
+// `hydrogenJar`; wire them up once every project has been configured.
+gradle.projectsEvaluated {
+	collectJars.configure { task ->
+		loaderProjects.each { p ->
+			if (p.ext.has('hydrogenJar')) {
+				task.from(p.ext.hydrogenJar)
+			}
 		}
 	}
-	into layout.buildDirectory.dir('dist')
+}
+
+// Copies the collected jars into the committed dist/<loader>/ folders that the
+// README links to. A Copy rather than a Sync, so a narrowed build (-Ploader=forge)
+// only replaces its own jars and leaves the other loaders' alone.
+tasks.register('updateDist', Copy) {
+	group = 'build'
+	description = 'Refreshes dist/<loader>/ from build/dist.'
+	from collectJars
+	into layout.projectDirectory.dir('dist')
+	// hydrogen-<loader>-<minecraft>-<version>.jar
+	eachFile { f -> f.path = "${f.name.split('-')[1]}/${f.name}" }
+	includeEmptyDirs = false
+}
+
+// Narrow either task with -Ploader=fabric,quilt and -Pmc=1.21.1; see settings.gradle.
+tasks.register('publishLoader') {
+	group = 'publishing'
+	description = 'Publishes every included loader jar to GitHub Packages.'
+	loaderProjects.each { p ->
+		dependsOn "${p.path}:publishAllPublicationsToGitHubPackagesRepository"
+	}
 }

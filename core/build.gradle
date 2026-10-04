@@ -1,3 +1,6 @@
+// Plain Java: policy, maths and the platform interface. No Minecraft, no loader.
+// Every loader project compiles these sources into its own jar; this project
+// exists so the logic can be unit tested without a game.
 plugins {
 	id 'java-library'
 }
@@ -7,13 +10,24 @@ repositories {
 }
 
 dependencies {
-	// Minecraft already ships both of these; never bundled.
+	// Minecraft already ships slf4j on every supported version; never bundled.
 	compileOnly 'org.slf4j:slf4j-api:2.0.9'
-	compileOnly 'org.jetbrains:annotations:24.1.0'
+	testImplementation 'org.slf4j:slf4j-api:2.0.9'
+
+	testImplementation platform('org.junit:junit-bom:5.13.4')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// Java 17 so the 1.20.x branch can consume it.
+java {
+	toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
 tasks.withType(JavaCompile).configureEach {
 	options.release = 17
 	options.encoding = 'UTF-8'
+}
+
+test {
+	useJUnitPlatform()
 }

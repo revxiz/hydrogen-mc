@@ -1,0 +1,5 @@
+plugins {
+	id 'net.minecraftforge.gradle'
+}
+
+apply from: rootProject.file('gradle/loaders/forge.gradle')

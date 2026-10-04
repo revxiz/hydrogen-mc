@@ -13,19 +13,19 @@ import java.util.Set;
  * Decides at class-load time which hooks are safe on this install.
  *
  * Framebuffer scaling is skipped when a Vulkan backend owns the pipeline, and
- * chunk ordering is skipped when Sodium supplies its own scheduler. Hydrogen
- * then only reads metrics around those mods, which is what keeps it conflict
- * free out of the box.
+ * vanilla chunk ordering is skipped when Sodium supplies its own scheduler.
+ * Hydrogen then only reads metrics around those mods, which is what keeps it
+ * conflict free out of the box.
  */
 public final class HydrogenMixinPlugin implements IMixinConfigPlugin {
 	private static final Set<String> DRS_MIXINS = Set.of(
 			"GameRendererDrsMixin",
-			"RenderTargetMixin");
+			"MainTargetAccessor");
 
 	private static final Set<String> CHUNK_MIXINS = Set.of(
-			"CompileTaskMixin",
 			"CompileTaskQueueMixin",
-			"SectionTaskQueueMixin");
+			"SectionTaskQueueMixin",
+			"LevelRendererDeferMixin");
 
 	private boolean vulkan;
 	private boolean sodium;
@@ -36,11 +36,11 @@ public final class HydrogenMixinPlugin implements IMixinConfigPlugin {
 		sodium = ModProbe.sodium();
 
 		if (vulkan) {
-			HLog.LOG.info("Hydrogen: VulkanMod detected, framebuffer scaling disabled");
+			HLog.once("mixin-vulkan", "Hydrogen: VulkanMod detected, framebuffer scaling disabled");
 		}
 
 		if (sodium) {
-			HLog.LOG.info("Hydrogen: Sodium detected, vanilla chunk ordering hooks disabled");
+			HLog.once("mixin-sodium", "Hydrogen: Sodium detected, vanilla chunk ordering hooks disabled");
 		}
 	}
 
@@ -52,8 +52,8 @@ public final class HydrogenMixinPlugin implements IMixinConfigPlugin {
 			return false;
 		}
 
-		// Sodium replaces the vanilla section queue entirely, so these would
-		// either never fire or fight its own ordering.
+		// Sodium replaces the vanilla section queue and rebuild path entirely, so
+		// these would either never fire or fight its own ordering.
 		return !sodium || !CHUNK_MIXINS.contains(simple);
 	}
 

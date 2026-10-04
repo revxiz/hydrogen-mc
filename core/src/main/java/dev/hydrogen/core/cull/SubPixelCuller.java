@@ -1,8 +1,8 @@
 package dev.hydrogen.core.cull;
 
-import dev.hydrogen.core.config.HConfig;
 import dev.hydrogen.core.hw.Budget;
 import dev.hydrogen.core.hw.DisplayInfo;
+import dev.hydrogen.core.hw.Tuning;
 
 /**
  * Screen-space size test. An object that covers less than a physical pixel cannot
@@ -16,7 +16,6 @@ import dev.hydrogen.core.hw.DisplayInfo;
  * so the test follows the resolution the world is actually drawn at.
  */
 public final class SubPixelCuller {
-	private final HConfig config;
 	private final Budget budget;
 
 	private volatile double focalPx = 540.0D;
@@ -25,8 +24,7 @@ public final class SubPixelCuller {
 	private long tested;
 	private long culled;
 
-	public SubPixelCuller(HConfig config, Budget budget) {
-		this.config = config;
+	public SubPixelCuller(Budget budget) {
 		this.budget = budget;
 	}
 
@@ -57,7 +55,7 @@ public final class SubPixelCuller {
 	}
 
 	public boolean enabled() {
-		return config.bool("cull.subpixel.enabled");
+		return budget.tuning().subPixel();
 	}
 
 	/**
@@ -66,12 +64,25 @@ public final class SubPixelCuller {
 	 * @return true when the object can be skipped this frame
 	 */
 	public boolean shouldCull(double sizeBlocks, double distanceBlocks) {
-		if (!enabled() || distanceBlocks < budget.subPixelMinDistance()) {
+		return shouldCullSq(sizeBlocks, distanceBlocks * distanceBlocks);
+	}
+
+	/**
+	 * Same test without the square root: {@code size * focal < threshold * distance}
+	 * compared in squares, since both sides are positive.
+	 */
+	public boolean shouldCullSq(double sizeBlocks, double distanceSq) {
+		Tuning t = budget.tuning();
+		double min = t.subPixelMinDistance();
+
+		if (!t.subPixel() || distanceSq < min * min || !(sizeBlocks > 0.0D)) {
 			return false;
 		}
 
 		tested++;
-		boolean cull = projectedPixels(sizeBlocks, distanceBlocks) < budget.subPixelThreshold();
+		double projected = sizeBlocks * focalPx;
+		double limit = t.subPixelThreshold();
+		boolean cull = projected * projected < limit * limit * distanceSq;
 
 		if (cull) {
 			culled++;

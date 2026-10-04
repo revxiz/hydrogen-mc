@@ -1,7 +1,7 @@
 package dev.hydrogen.core.chunk;
 
-import dev.hydrogen.core.config.HConfig;
 import dev.hydrogen.core.hw.Budget;
+import dev.hydrogen.core.hw.Tuning;
 
 /**
  * Orders chunk meshing by where the player is looking and heading.
@@ -13,7 +13,6 @@ import dev.hydrogen.core.hw.Budget;
  * reorders hard.
  */
 public final class ConePriority {
-	private final HConfig config;
 	private final Budget budget;
 
 	private volatile double camX;
@@ -26,16 +25,18 @@ public final class ConePriority {
 	private volatile double velZ;
 	private volatile double speed;
 
-	private volatile long deferred;
-	private volatile long insideCone;
-	private volatile long outsideCone;
+	private long deferred;
+	private long insideCone;
+	private long outsideCone;
 
-	public ConePriority(HConfig config, Budget budget) {
-		this.config = config;
+	public ConePriority(Budget budget) {
 		this.budget = budget;
 	}
 
-	/** Called once per frame from the render thread. */
+	/**
+	 * Called every client tick from the render thread with the live camera, which
+	 * in third person sits behind or in front of the player rather than at the eyes.
+	 */
 	public void updateCamera(double x, double y, double z,
 			double yawDegrees, double pitchDegrees,
 			double vx, double vz) {
@@ -58,11 +59,11 @@ public final class ConePriority {
 	}
 
 	public boolean enabled() {
-		return config.bool("chunk.cone.enabled");
+		return budget.tuning().cone();
 	}
 
 	public double coneCos() {
-		return Math.cos(Math.toRadians(budget.coneDegrees() * 0.5D));
+		return budget.tuning().coneCos();
 	}
 
 	/** Cosine between the camera forward vector and the direction of a section. */
@@ -91,12 +92,14 @@ public final class ConePriority {
 	 * rising toward the derived penalty directly behind the player.
 	 */
 	public double costMultiplier(double x, double y, double z) {
-		if (!enabled()) {
+		Tuning t = budget.tuning();
+
+		if (!t.cone()) {
 			return 1.0D;
 		}
 
 		double cos = forwardness(x, y, z);
-		double coneCos = coneCos();
+		double coneCos = t.coneCos();
 
 		if (cos >= coneCos) {
 			insideCone++;
@@ -104,9 +107,9 @@ public final class ConePriority {
 		}
 
 		outsideCone++;
-		double penalty = budget.conePenalty();
-		double t = (coneCos - cos) / (coneCos + 1.0D);
-		return 1.0D + (penalty - 1.0D) * t * t;
+		double penalty = t.conePenalty();
+		double behind = (coneCos - cos) / (coneCos + 1.0D);
+		return 1.0D + (penalty - 1.0D) * behind * behind;
 	}
 
 	/** Cone-weighted cost used to pick the next section out of a queue. */
@@ -123,11 +126,9 @@ public final class ConePriority {
 	 * frame. Nearby work is never deferred, so the player is not ringed by holes.
 	 */
 	public boolean shouldDefer(double x, double y, double z, double frameMs) {
-		if (!enabled() || !config.bool("chunk.cone.deferBehind")) {
-			return false;
-		}
+		Tuning t = budget.tuning();
 
-		if (frameMs < budget.coneDeferFrameMs()) {
+		if (!t.cone() || !t.coneDefer() || frameMs < t.coneDeferFrameMs()) {
 			return false;
 		}
 

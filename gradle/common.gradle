@@ -1,0 +1,148 @@
+// Shared wiring for every versions/<minecraft>/<loader> project. Applied first by
+// each gradle/loaders/<loader>.gradle script, after the build tool plugin.
+//
+// Sources are layered, most shared first:
+//   core/              plain Java policy and maths, no Minecraft
+//   mcshared/          LWJGL only: natives, probes, the loader-neutral boot
+//   mcwindow/<api>/    display probe for the window library: glfw, or sdl from 26.3
+//   mccommon/          Minecraft APIs identical on every branch
+//   <render_group>/    mclegacy (OpenGL render targets) or mcmodern (Blaze3D)
+//   versions/<mc>/common/   what is left that differs per Minecraft version
+//   loaders/<loader>/       entry point, loader bridge and metadata
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+
+def mcDir = projectDir.parentFile
+def mcProps = new Properties()
+new File(mcDir, 'mc.properties').withReader('UTF-8') { mcProps.load(it) }
+mcProps.each { k, v -> project.ext.set(k as String, (v as String).trim()) }
+
+// Verification aid: compile a branch against another Minecraft version from the
+// range it claims, for example -PmcOverride=1.20.4 on the 1.20.1 branch.
+if (project.hasProperty('mcOverride')) {
+	project.ext.minecraft_version = project.property('mcOverride')
+}
+
+ext.loader = projectDir.name
+ext.mcBranch = mcDir.name
+ext.isObfuscated = project.ext.obfuscated.toBoolean()
+
+base {
+	archivesName = "${rootProject.mod_id}-${loader}-${mcBranch}"
+}
+
+java {
+	toolchain.languageVersion = JavaLanguageVersion.of(java_version as int)
+	withSourcesJar()
+}
+
+sourceSets.main {
+	java {
+		srcDir rootProject.file('core/src/main/java')
+		srcDir rootProject.file('mcshared/java')
+		srcDir rootProject.file("mcwindow/${window_api}/java")
+		srcDir rootProject.file('mccommon/java')
+		srcDir rootProject.file("${render_group}/java")
+		srcDir new File(mcDir, 'common/java')
+		srcDir rootProject.file("loaders/${loader}/java")
+	}
+
+	resources {
+		srcDir rootProject.file('mcshared/resources')
+		srcDir new File(mcDir, 'common/resources')
+		srcDir rootProject.file("loaders/${loader}/resources")
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.release = java_version as int
+	options.encoding = 'UTF-8'
+}
+
+// Quilt wants its own version predicate shape: every space separated Fabric
+// constraint becomes one entry that must all hold.
+def quiltVersions = { String fabricRange ->
+	def parts = fabricRange.split(/\s+/).findAll { it }.collect { "\"${it}\"" }
+	parts.size() == 1 ? parts[0] : "{ \"all\": [${parts.join(', ')}] }"
+}
+
+// Forge reads pack.mcmeta from every mod jar that carries assets. 1.20.1 shows a
+// warning screen without one; later releases log an error. The game checks the
+// file both as a resource pack and as a data pack, so like Forge's own jar it
+// declares the data pack format, which from 82 (1.21.9) satisfies both checks
+// with the min/max pair alone.
+def packFormatFields = { String format ->
+	int major = (format ?: '15') as int
+	major >= 82 ? "\"min_format\": ${major},\n\t\t\"max_format\": ${major}" : "\"pack_format\": ${major}"
+}
+
+def meta = [
+	version           : project.version,
+	mod_id            : rootProject.mod_id,
+	mod_name          : rootProject.mod_name,
+	mod_description   : rootProject.mod_description,
+	mod_authors       : rootProject.mod_authors,
+	mod_license       : rootProject.mod_license,
+	mod_source        : rootProject.mod_source,
+	mod_issues        : rootProject.mod_issues,
+	maven_group       : rootProject.maven_group,
+	java_version      : java_version,
+	mixin_compat      : mixin_compat,
+	refmap_line       : project.ext.has('refmapLine') ? project.ext.refmapLine : '',
+	fabric_mc_range   : project.findProperty('fabric_mc_range') ?: '*',
+	fabric_loader_range: ">=${project.findProperty('fabric_loader_min') ?: '0.16.0'}",
+	quilt_loader_range: ">=${project.findProperty('quilt_loader_min') ?: '0.26.0'}",
+	quilt_mc_versions : quiltVersions(project.findProperty('fabric_mc_range') ?: '*'),
+	forge_loader_range: project.findProperty('forge_loader_range') ?: '[0,)',
+	forge_mc_range    : project.findProperty('forge_mc_range') ?: '[0,)',
+	neoforge_dep_range: project.findProperty('neoforge_dep_range') ?: '[0,)',
+	pack_format_fields: packFormatFields(project.findProperty('mod_pack_format') as String),
+]
+
+processResources {
+	inputs.properties(meta)
+	filteringCharset = 'UTF-8'
+
+	filesMatching(['fabric.mod.json', 'quilt.mod.json', 'META-INF/mods.toml', 'META-INF/neoforge.mods.toml',
+			'*.mixins.json', 'pack.mcmeta']) {
+		expand(meta)
+	}
+}
+
+jar {
+	from(rootProject.file('LICENSE')) { rename { "${it}_${rootProject.mod_id}" } }
+
+	manifest.attributes(
+			'Implementation-Title': rootProject.mod_name,
+			'Implementation-Version': project.version,
+			'Implementation-Vendor': rootProject.mod_authors)
+}
+
+// Published to GitHub Packages by the release workflow, one artifact per loader
+// and Minecraft branch. Only the finished jar is published, so the POM carries
+// no dependencies: everything Hydrogen needs is already inside it.
+afterEvaluate {
+	publishing {
+		publications {
+			create('mavenJava', MavenPublication) {
+				artifactId = base.archivesName.get()
+				artifact(project.ext.hydrogenJar)
+			}
+		}
+
+		repositories {
+			def slug = System.getenv('GITHUB_REPOSITORY')
+
+			if (slug) {
+				maven {
+					name = 'GitHubPackages'
+					url = "https://maven.pkg.github.com/${slug}"
+					credentials {
+						username = System.getenv('GITHUB_ACTOR')
+						password = System.getenv('GITHUB_TOKEN')
+					}
+				}
+			}
+		}
+	}
+}

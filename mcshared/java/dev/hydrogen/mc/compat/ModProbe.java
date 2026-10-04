@@ -1,7 +1,7 @@
 package dev.hydrogen.mc.compat;
 
 import dev.hydrogen.core.compat.CompatState;
-import net.fabricmc.loader.api.FabricLoader;
+import dev.hydrogen.mc.loader.LoaderBridge;
 
 /**
  * Reads what else is installed. Hydrogen only observes these mods: it never
@@ -14,12 +14,13 @@ public final class ModProbe {
 
 	public static boolean loaded(String id) {
 		try {
-			return FabricLoader.getInstance().isModLoaded(id);
+			return LoaderBridge.isModLoaded(id);
 		} catch (Throwable t) {
 			return false;
 		}
 	}
 
+	/** Sodium on Fabric and NeoForge, and its Forge ports. */
 	public static boolean sodium() {
 		return loaded("sodium") || loaded("embeddium") || loaded("rubidium");
 	}
@@ -28,16 +29,9 @@ public final class ModProbe {
 		return loaded("vulkanmod");
 	}
 
+	/** Iris, or its Forge port Oculus. */
 	public static boolean iris() {
 		return loaded("iris") || loaded("oculus");
-	}
-
-	public static boolean yacl() {
-		return loaded("yet_another_config_lib_v3") || loaded("yet_another_config_lib");
-	}
-
-	public static boolean clothConfig() {
-		return loaded("cloth-config") || loaded("cloth-config2");
 	}
 
 	public static void apply(CompatState state) {

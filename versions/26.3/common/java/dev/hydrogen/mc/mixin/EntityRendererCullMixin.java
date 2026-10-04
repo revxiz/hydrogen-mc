@@ -1,0 +1,34 @@
+package dev.hydrogen.mc.mixin;
+
+import dev.hydrogen.mc.EntityCulling;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.AABB;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+/**
+ * Sub-pixel culling for entities. 26.3 passes the partial tick through both the
+ * test and the culling box, so the box follows the interpolated position.
+ */
+@Mixin(EntityRenderer.class)
+public abstract class EntityRendererCullMixin {
+	@Shadow
+	protected abstract boolean affectedByCulling(Entity entity);
+
+	@Shadow
+	protected abstract AABB getBoundingBoxForCulling(Entity entity, float partialTick);
+
+	@Inject(method = "shouldRender", at = @At("HEAD"), cancellable = true)
+	private void hydrogen$subPixelCull(Entity entity, Frustum frustum, double camX, double camY, double camZ,
+			float partialTick, CallbackInfoReturnable<Boolean> cir) {
+		if (affectedByCulling(entity)
+				&& EntityCulling.cull(entity, getBoundingBoxForCulling(entity, partialTick), camX, camY, camZ)) {
+			cir.setReturnValue(false);
+		}
+	}
+}

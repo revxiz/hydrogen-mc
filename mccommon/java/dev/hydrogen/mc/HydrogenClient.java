@@ -9,67 +9,85 @@ import dev.hydrogen.core.hw.DisplayInfo;
 import dev.hydrogen.core.hw.GpuInfo;
 import dev.hydrogen.mc.gl.DisplayProbe;
 import dev.hydrogen.mc.gl.VramProbe;
-import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Per-frame client driver. Everything here uses Minecraft APIs that are
- * identical on 1.20.1 through 26.x; the two pieces that are not live behind
- * {@link ScreenAccess} and {@link dev.hydrogen.mc.render.RenderScaler}.
+ * Per-tick client driver, called from the end of {@code Minecraft.tick()} by a
+ * mixin, so it needs no loader event API. Everything here uses Minecraft APIs
+ * that are identical on every supported version; the pieces that are not live
+ * behind {@link ClientBridge}.
  */
-public final class HydrogenClient implements ClientModInitializer {
+public final class HydrogenClient {
+	private static final HydrogenClient INSTANCE = new HydrogenClient();
+
+	/** Coarse clock for texture use stamps, written once per frame. */
+	public static volatile long frameClockMs;
+
 	private final VramProbe vramProbe = new VramProbe();
+	private final double[] camera = new double[5];
 
 	private boolean graphicsReady;
+	private boolean failed;
 	private long lastDisplayCheckMs;
-	private int lastWidth;
-	private int lastHeight;
+	private DisplayInfo lastDisplay = DisplayInfo.UNKNOWN;
 	private boolean wasInWorld;
+	private Object lastLevel;
+	private int ticks;
 
-	@Override
-	public void onInitializeClient() {
-		ClientTickEvents.END_CLIENT_TICK.register(this::onEndTick);
-		HLog.LOG.info("Hydrogen client ready");
+	private HydrogenClient() {
 	}
 
-	private void onEndTick(Minecraft mc) {
+	public static void onEndTick(Minecraft mc) {
+		INSTANCE.tick(mc);
+	}
+
+	public static boolean inWorld(Minecraft mc) {
+		return mc.level != null && mc.player != null;
+	}
+
+	private void tick(Minecraft mc) {
 		Hydrogen h = Hydrogen.get();
 
-		if (h == null || !h.enabled()) {
+		if (h == null || failed || !h.enabled()) {
 			return;
 		}
 
 		try {
 			h.bindCurrentThread(ThreadRole.RENDER);
+			ticks++;
 
 			if (!graphicsReady) {
 				initGraphics(mc, h);
 			}
 
 			trackDisplay(mc, h);
-			trackWorld(mc, h);
-			feedCamera(mc, h);
-			runGc(mc, h);
-			runVram(mc, h);
-			DeferredSections.replay(mc, h.lastFrameMs(), h.budget().targetFrameMs());
+			boolean inWorld = trackWorld(mc, h);
+
+			if (inWorld) {
+				feedCamera(mc, h);
+				runGc(mc, h);
+				runVram(mc, h);
+				DeferredSections.replay(mc, h.lastFrameMs(), h.budget().targetFrameMs());
+			} else {
+				runGc(mc, h);
+			}
 		} catch (Throwable t) {
+			// Stop for the session rather than throwing every tick.
+			failed = true;
 			HLog.warnOnce("client-tick", "Hydrogen: client tick hook failed, disabling it", t);
 		}
 	}
 
 	private void initGraphics(Minecraft mc, Hydrogen h) {
-		boolean vulkan = h.compat().vulkanMod();
-		GpuInfo gpu = vramProbe.probe(vulkan);
+		GpuInfo gpu = vramProbe.probe(h.compat().vulkanMod());
 		DisplayInfo display = probeDisplay(mc);
 
-		h.hardware().setRenderDistanceChunks(mc.options.getEffectiveRenderDistance());
+		h.hardware().setRenderDistanceChunks(mc.options.renderDistance().get());
 		h.hardware().setFovDegrees(mc.options.fov().get());
 		h.onGraphicsReady(display, gpu);
 
-		lastWidth = display.framebufferWidth();
-		lastHeight = display.framebufferHeight();
+		lastDisplay = display;
 		graphicsReady = true;
 	}
 
@@ -77,10 +95,14 @@ public final class HydrogenClient implements ClientModInitializer {
 		double guiScale = mc.getWindow().getGuiScale();
 		int limit = mc.options.framerateLimit().get();
 		boolean vsync = mc.options.enableVsync().get();
-		return DisplayProbe.probe(ScreenAccess.windowHandle(mc), guiScale, limit, vsync);
+		return DisplayProbe.probe(ClientBridge.windowHandle(mc), guiScale, limit, vsync);
 	}
 
-	/** Cheap poll; a resize or monitor change re-derives every threshold. */
+	/**
+	 * Re-probes once a second. A new size, refresh rate or DPI re-runs calibration;
+	 * a changed frame limiter or vsync only moves the target, which used to wait
+	 * for the next window resize.
+	 */
 	private void trackDisplay(Minecraft mc, Hydrogen h) {
 		long now = System.currentTimeMillis();
 
@@ -89,22 +111,32 @@ public final class HydrogenClient implements ClientModInitializer {
 		}
 
 		lastDisplayCheckMs = now;
-
-		int w = mc.getWindow().getWidth();
-		int hgt = mc.getWindow().getHeight();
-
-		h.hardware().setRenderDistanceChunks(mc.options.getEffectiveRenderDistance());
+		h.hardware().setRenderDistanceChunks(mc.options.renderDistance().get());
 		h.hardware().setFovDegrees(mc.options.fov().get());
 
-		if (w != lastWidth || hgt != lastHeight) {
-			lastWidth = w;
-			lastHeight = hgt;
-			h.onDisplayChanged(probeDisplay(mc));
+		DisplayInfo d = probeDisplay(mc);
+
+		if (d.equals(lastDisplay)) {
+			return;
 		}
+
+		boolean geometry = d.framebufferWidth() != lastDisplay.framebufferWidth()
+				|| d.framebufferHeight() != lastDisplay.framebufferHeight()
+				|| d.refreshHz() != lastDisplay.refreshHz()
+				|| d.contentScale() != lastDisplay.contentScale();
+
+		lastDisplay = d;
+		h.onDisplayChanged(d, geometry);
 	}
 
-	private void trackWorld(Minecraft mc, Hydrogen h) {
+	private boolean trackWorld(Minecraft mc, Hydrogen h) {
 		boolean inWorld = mc.level != null && mc.player != null;
+
+		if (mc.level != lastLevel) {
+			// Deferred coordinates belong to the level they came from.
+			DeferredSections.clear();
+			lastLevel = mc.level;
+		}
 
 		if (inWorld && !wasInWorld) {
 			h.onWorldJoin();
@@ -113,22 +145,22 @@ public final class HydrogenClient implements ClientModInitializer {
 		}
 
 		wasInWorld = inWorld;
+		return inWorld;
 	}
 
+	/** The live camera: in third person it is not at the player's eyes. */
 	private void feedCamera(Minecraft mc, Hydrogen h) {
-		if (mc.player == null) {
-			return;
+		Vec3 motion = mc.player.getDeltaMovement();
+
+		if (!ClientBridge.camera(mc, camera)) {
+			camera[0] = mc.player.getX();
+			camera[1] = mc.player.getEyeY();
+			camera[2] = mc.player.getZ();
+			camera[3] = mc.player.getYRot();
+			camera[4] = mc.player.getXRot();
 		}
 
-		Vec3 motion = mc.player.getDeltaMovement();
-		h.cone().updateCamera(
-				mc.player.getX(),
-				mc.player.getEyeY(),
-				mc.player.getZ(),
-				mc.player.getYRot(),
-				mc.player.getXRot(),
-				motion.x,
-				motion.z);
+		h.cone().updateCamera(camera[0], camera[1], camera[2], camera[3], camera[4], motion.x, motion.z);
 	}
 
 	private void runGc(Minecraft mc, Hydrogen h) {
@@ -138,16 +170,17 @@ public final class HydrogenClient implements ClientModInitializer {
 			Vec3 m = mc.player.getDeltaMovement();
 			speed = Math.sqrt(m.x * m.x + m.z * m.z);
 
-			if (mc.player.hurtTime > 0 || mc.options.keyAttack.isDown()) {
+			if (mc.player.hurtTime > 0 || mc.options.keyAttack.isDown() || mc.options.keyUse.isDown()) {
 				h.gc().markAction();
 			}
 		}
 
-		h.gc().tick(speed, ScreenAccess.screenOpen(mc), mc.isPaused());
+		h.gc().tick(speed, ClientBridge.screenOpen(mc), mc.isPaused());
 	}
 
+	/** VRAM moves slowly; four reads a second are plenty and keep driver queries off most frames. */
 	private void runVram(Minecraft mc, Hydrogen h) {
-		if (!vramProbe.usable()) {
+		if (!vramProbe.usable() || ticks % 5 != 0) {
 			return;
 		}
 
@@ -159,5 +192,7 @@ public final class HydrogenClient implements ClientModInitializer {
 		if (action != EvictionController.Action.NONE) {
 			TextureEvictor.run(mc, h, action, snapshot);
 		}
+
+		h.eviction().relaxCap(snapshot, mc.options.renderDistance().get(), System.currentTimeMillis());
 	}
 }

@@ -67,6 +67,19 @@ final class Natives {
 		}
 	}
 
+	/** Like {@link #fn} for symbols that are optional on older OS versions; never logs. */
+	static long fnQuiet(SharedLibrary lib, String name) {
+		if (lib == null) {
+			return 0L;
+		}
+
+		try {
+			return lib.getFunctionAddress(name);
+		} catch (Throwable t) {
+			return 0L;
+		}
+	}
+
 	static boolean has(long... addresses) {
 		for (long a : addresses) {
 			if (a == 0L) {

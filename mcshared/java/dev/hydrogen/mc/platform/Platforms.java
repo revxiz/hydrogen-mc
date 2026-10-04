@@ -28,6 +28,14 @@ public final class Platforms {
 	}
 
 	private static NativePlatform create() {
+		// Dedicated servers ship without LWJGL, which every native call goes through.
+		// That is expected, so it gets an info line rather than a stack of warnings.
+		if (Platforms.class.getClassLoader().getResource("org/lwjgl/system/Platform.class") == null) {
+			HLog.once("plat-no-lwjgl",
+					"Hydrogen: no LWJGL in this process (dedicated server), using JVM thread priorities only");
+			return new NoopPlatform("no LWJGL");
+		}
+
 		try {
 			NativePlatform p = switch (Platform.get()) {
 				case WINDOWS -> new WindowsPlatform();

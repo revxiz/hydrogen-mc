@@ -1,6 +1,7 @@
 package dev.hydrogen.mc.chunk;
 
 import dev.hydrogen.core.Hydrogen;
+import dev.hydrogen.core.chunk.ConePriority;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Position;
 
@@ -11,6 +12,9 @@ import net.minecraft.core.Position;
  * builds against recompiles with its own quota. Only the distance it compares is
  * changed, so meshing shifts into the forward sight cone while all of that
  * bookkeeping stays exactly as Mojang wrote it.
+ *
+ * This runs once per queued section on every poll, so it reads the tuning
+ * snapshot only and allocates nothing.
  */
 public final class ConeMetric {
 	private ConeMetric() {
@@ -20,11 +24,17 @@ public final class ConeMetric {
 		double base = origin.distToCenterSqr(camera);
 		Hydrogen h = Hydrogen.get();
 
-		if (h == null || !h.enabled() || !h.cone().enabled()) {
+		if (h == null) {
 			return base;
 		}
 
-		double m = h.cone().costMultiplier(origin.getX() + 8.0D, origin.getY() + 8.0D, origin.getZ() + 8.0D);
+		ConePriority cone = h.cone();
+
+		if (!h.tuning().enabled() || !cone.enabled()) {
+			return base;
+		}
+
+		double m = cone.costMultiplier(origin.getX() + 8.0D, origin.getY() + 8.0D, origin.getZ() + 8.0D);
 		// The queue compares squared distances, so the multiplier is squared too.
 		return base * m * m;
 	}

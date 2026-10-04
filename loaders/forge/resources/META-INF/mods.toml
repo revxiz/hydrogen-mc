@@ -1,0 +1,30 @@
+modLoader = "javafml"
+loaderVersion = "${forge_loader_range}"
+license = "${mod_license}"
+issueTrackerURL = "${mod_issues}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${version}"
+displayName = "${mod_name}"
+displayURL = "${mod_source}"
+logoFile = "assets/hydrogen/icon.png"
+authors = "${mod_authors}"
+description = '''${mod_description}'''
+# Client side optimisation with two optional server-side throttles. Hydrogen adds
+# no content and no network channels, so either side may run without it.
+displayTest = "IGNORE_ALL_VERSION"
+
+[[dependencies.${mod_id}]]
+modId = "forge"
+mandatory = true
+versionRange = "${forge_loader_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${forge_mc_range}"
+ordering = "NONE"
+side = "BOTH"

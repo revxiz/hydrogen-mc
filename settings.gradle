@@ -1,19 +1,56 @@
 pluginManagement {
 	repositories {
 		maven { name = 'Fabric'; url = 'https://maven.fabricmc.net/' }
-		mavenCentral()
+		maven { name = 'NeoForged'; url = 'https://maven.neoforged.net/releases/' }
+		maven { name = 'MinecraftForge'; url = 'https://maven.minecraftforge.net/' }
 		gradlePluginPortal()
+		mavenCentral()
 	}
+
+	// One version per build tool, shared by every loader project that uses it.
+	plugins {
+		id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+		id 'net.fabricmc.fabric-loom' version "${loom_version}"
+		id 'net.neoforged.moddev' version "${moddev_version}"
+		id 'net.neoforged.moddev.legacyforge' version "${moddev_version}"
+		id 'net.minecraftforge.gradle' version "${forgegradle_version}"
+	}
+}
+
+plugins {
+	// Lets Gradle fetch the JDK 17/21/25 toolchains when they are not installed.
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
 rootProject.name = 'hydrogen'
 
 include 'core'
 
-// One Loom subproject per supported Minecraft branch.
-def branches = ['1.20.1', '1.21.1', '1.21.11', '26.2']
-branches.each { b ->
-	def name = 'mc' + b.replace('.', '_')
-	include name
-	project(":$name").projectDir = file("versions/$b")
+// Every versions/<minecraft>/<loader>/build.gradle is one jar, named
+// <loader>-<minecraft>, for example :fabric-1.21.1 or :neoforge-26.3.
+//
+// -Ploader=fabric and -Pmc=1.21.1 (comma separated) narrow the build. Projects
+// outside the filter are not included at all, so a Fabric-only build never has
+// to set up Forge's or NeoForge's decompiled game.
+def filter = { String key ->
+	def v = startParameter.projectProperties.get(key)
+	v ? v.split(',').collect { it.trim() }.findAll { it } as Set : null
+}
+def onlyLoaders = filter('loader')
+def onlyMc = filter('mc')
+
+file('versions').listFiles().findAll { it.isDirectory() }.sort { it.name }.each { mc ->
+	if (onlyMc != null && !onlyMc.contains(mc.name)) {
+		return
+	}
+
+	mc.listFiles().findAll { new File(it, 'build.gradle').isFile() }.sort { it.name }.each { loader ->
+		if (onlyLoaders != null && !onlyLoaders.contains(loader.name)) {
+			return
+		}
+
+		def name = "${loader.name}-${mc.name}"
+		include name
+		project(":$name").projectDir = loader
+	}
 }

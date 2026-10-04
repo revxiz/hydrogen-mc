@@ -1,0 +1,3 @@
+// Fabric, built with Fabric Loom. See loom.gradle for the shared setup.
+apply from: rootProject.file('gradle/common.gradle')
+apply from: rootProject.file('gradle/loaders/loom.gradle')

@@ -16,6 +16,12 @@ import org.lwjgl.opengl.GLCapabilities;
  * NVIDIA reports total and free directly. AMD's ATI_meminfo reports free only,
  * so the first reading taken before the world loads is used as the capacity
  * reference.
+ *
+ * Some drivers answer with numbers that mean nothing for eviction: software
+ * rasterizers, and Mesa on integrated GPUs, report a few megabytes of
+ * "dedicated" memory while really drawing from system RAM. Treating that as a
+ * nearly full card made eviction fire on the title screen, so those readings are
+ * rejected and the memory features stay off.
  */
 public final class VramProbe {
 	// GL_NVX_gpu_memory_info
@@ -25,6 +31,9 @@ public final class VramProbe {
 
 	// GL_ATI_meminfo
 	private static final int TEXTURE_FREE_MEMORY_ATI = 0x87FC;
+
+	/** Smallest dedicated pool worth managing; below this the GPU is sharing system RAM. */
+	private static final long MIN_PLAUSIBLE_KB = 512L * 1024L;
 
 	private enum Source {
 		NVX,
@@ -48,8 +57,17 @@ public final class VramProbe {
 			return new GpuInfo(vendor, renderer, 0L, "none", RenderBackend.VULKAN);
 		}
 
+		GLCapabilities caps;
+
 		try {
-			GLCapabilities caps = GL.getCapabilities();
+			caps = GL.getCapabilities();
+		} catch (IllegalStateException e) {
+			// No OpenGL context on this thread: 26.3 can render through Vulkan.
+			HLog.once("vram-nogl", "Hydrogen: no OpenGL context, VRAM features stay off");
+			return GpuInfo.UNKNOWN;
+		}
+
+		try {
 			vendor = str(GL11.GL_VENDOR);
 			renderer = str(GL11.GL_RENDERER);
 			version = str(GL11.GL_VERSION);
@@ -65,7 +83,21 @@ public final class VramProbe {
 			}
 
 			probed = true;
+
+			if (source != Source.NONE && softwareRenderer(renderer)) {
+				source = Source.NONE;
+				HLog.once("vram-software", "Hydrogen: software renderer (" + renderer + "), memory features stay off");
+			}
+
 			VramSnapshot first = read();
+
+			if (source != Source.NONE && first.totalKb() < MIN_PLAUSIBLE_KB) {
+				HLog.once("vram-implausible", "Hydrogen: driver reports only " + first.totalKb() / 1024L
+						+ " MB of video memory, treating it as shared memory and leaving memory features off");
+				source = Source.NONE;
+				first = VramSnapshot.UNKNOWN;
+			}
+
 			referenceTotalKb = first.totalKb();
 
 			return new GpuInfo(vendor, renderer, referenceTotalKb, sourceName(), RenderBackend.VANILLA_GL);
@@ -81,6 +113,12 @@ public final class VramProbe {
 			case ATI -> "ATI_meminfo";
 			case NONE -> "none";
 		};
+	}
+
+	private static boolean softwareRenderer(String renderer) {
+		String r = renderer.toLowerCase(java.util.Locale.ROOT);
+		return r.contains("llvmpipe") || r.contains("softpipe") || r.contains("swiftshader")
+				|| r.contains("software rasterizer") || r.contains("basic render") || r.contains("gdi generic");
 	}
 
 	private static String str(int name) {

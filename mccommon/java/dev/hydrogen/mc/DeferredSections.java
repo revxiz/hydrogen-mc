@@ -12,7 +12,8 @@ import java.util.Set;
  * Deferred work is always replayed: dropping a dirty section outright would
  * leave stale geometry on screen, so each one is remembered and re-marked once
  * frames are comfortable again. When the buffer is full nothing is deferred, so
- * the queue can never grow without bound.
+ * the queue can never grow without bound. The queue is dropped whenever the level
+ * changes, because its coordinates mean nothing in another world or dimension.
  */
 public final class DeferredSections {
 	private static final int CAPACITY = 4096;
@@ -34,7 +35,7 @@ public final class DeferredSections {
 
 	/** Called from the client tick once the frame budget is being met again. */
 	public static void replay(Minecraft mc, double frameMs, double budgetMs) {
-		if (mc.levelRenderer == null || frameMs > budgetMs) {
+		if (mc.level == null || mc.levelRenderer == null || frameMs > budgetMs) {
 			return;
 		}
 

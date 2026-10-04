@@ -1,174 +1,229 @@
+<div align="center">
+
+<img src="mcshared/resources/assets/hydrogen/icon.png" width="112" alt="Hydrogen icon">
+
 # Hydrogen
 
-Most performance mods ship a set of numbers someone picked on their own PC. Cap
-the frame time at 16ms, evict textures at 2GB, cull anything past 64 blocks.
-Those numbers are right for exactly one machine.
+**A Minecraft performance mod that measures your machine instead of guessing.**
 
-Hydrogen doesn't ship any. It asks your OS what CPU you have, asks the driver how
-much video memory exists, asks GLFW what your monitor runs at, then benchmarks
-your actual game for five seconds and works out its own thresholds from what it
-measured. A 4K 60Hz rig and a 1080p 240Hz rig get completely different settings
-without anyone touching a config file.
+[![Fabric](https://img.shields.io/badge/Fabric-supported-dbd0b4?style=flat-square)](#download)
+[![Quilt](https://img.shields.io/badge/Quilt-supported-9722ff?style=flat-square)](#download)
+[![Forge](https://img.shields.io/badge/Forge-supported-e04e14?style=flat-square)](#download)
+[![NeoForge](https://img.shields.io/badge/NeoForge-supported-f16436?style=flat-square)](#download)
+<br>
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1_to_26.3-62b47a?style=flat-square)](#download)
+[![Build](https://img.shields.io/github/actions/workflow/status/revxiz/hydrogen-mc/build.yml?branch=main&style=flat-square&label=build)](https://github.com/revxiz/hydrogen-mc/actions/workflows/build.yml)
+[![Licence](https://img.shields.io/badge/licence-MIT-blue?style=flat-square)](LICENSE)
 
-Client side only. Fabric.
+</div>
+
+Most performance mods ship numbers someone picked on their own PC. Cap the frame
+time at 16 ms, evict textures at 2 GB, cull anything past 64 blocks. Those
+numbers are right for one machine.
+
+Hydrogen ships none of them. It asks your OS what CPU you have, asks the driver
+how much video memory exists, asks the window system (GLFW, or SDL3 from 26.3)
+what your monitor runs at, then watches your game for a few seconds and works
+out its own thresholds from what it saw. A 4K 60 Hz desktop and a 1080p 240 Hz
+laptop end up with different settings, and nobody opens a config file.
+
+It needs nothing else installed. No Fabric API, no Quilt Standard Libraries, no
+config library.
 
 ## Download
 
-| Jar | Minecraft | Java | Fabric Loader |
-|---|---|---|---|
-| [1.20.x](../../raw/main/dist/hydrogen-mc1.20.1-1.0.0.jar) | 1.20 - 1.20.6 | 17+ | 0.16.0+ |
-| [1.21 - 1.21.1](../../raw/main/dist/hydrogen-mc1.21.1-1.0.0.jar) | 1.21 - 1.21.1 | 21+ | 0.16.0+ |
-| [1.21.9 - 1.21.11](../../raw/main/dist/hydrogen-mc1.21.11-1.0.0.jar) | 1.21.9 - 1.21.11 | 21+ | 0.16.0+ |
-| [26.1+](../../raw/main/dist/hydrogen-mc26.2-1.0.0.jar) | 26.1+ | 25+ | 0.19.3+ |
+Pick your loader and Minecraft version, put the jar in `mods/`, and that's it.
 
-Grab the one matching your version, drop it in `mods/`, done. Fabric API is the
-only dependency.
+| Minecraft | Fabric | Quilt | Forge | NeoForge |
+|---|:---:|:---:|:---:|:---:|
+| **26.3** | [jar](dist/fabric/hydrogen-fabric-26.3-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.3-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-26.3-1.1.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-26.3-1.1.0.jar) ¹ |
+| **26.2** | [jar](dist/fabric/hydrogen-fabric-26.2-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.2-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-26.2-1.1.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-26.2-1.1.0.jar) |
+| **26.1 to 26.1.2** | [jar](dist/fabric/hydrogen-fabric-26.1-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-26.1-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-26.1-1.1.0.jar) ² | [jar](dist/neoforge/hydrogen-neoforge-26.1-1.1.0.jar) ² |
+| **1.21.11** | [jar](dist/fabric/hydrogen-fabric-1.21.11-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.21.11-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-1.21.11-1.1.0.jar) | [jar](dist/neoforge/hydrogen-neoforge-1.21.11-1.1.0.jar) |
+| **1.21 and 1.21.1** | [jar](dist/fabric/hydrogen-fabric-1.21.1-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.21.1-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-1.21.1-1.1.0.jar) ² | [jar](dist/neoforge/hydrogen-neoforge-1.21.1-1.1.0.jar) ² |
+| **1.20 to 1.20.4** | [jar](dist/fabric/hydrogen-fabric-1.20.1-1.1.0.jar) | [jar](dist/quilt/hydrogen-quilt-1.20.1-1.1.0.jar) | [jar](dist/forge/hydrogen-forge-1.20.1-1.1.0.jar) ² | use the Forge jar ³ |
+
+¹ NeoForge for 26.3 is still in beta.
+² Forge and NeoForge jars are built for the exact patch release shown in the file
+name (26.1.2, 1.21.1, 1.20.1), because those loaders run on Mojang's own names.
+³ NeoForge for 1.20.1 is Forge 47 under a new name and loads the Forge jar as is.
+
+| Loader | Minimum version | Java |
+|---|---|---|
+| Fabric Loader | 0.16.0 (0.19.3 on 26.x) | 17 for 1.20, 21 for 1.21, 25 for 26.x |
+| Quilt Loader | 0.26.0 (0.30.1 on 26.x) | same |
+| Forge | 47 / 52 / 61 / 64 / 65 / 66 | same |
+| NeoForge | 21.1 / 21.11 / 26.1.2 / 26.2 / 26.3 | same |
+
+Hydrogen is a client mod. The two simulation options at the bottom of this page
+also work on a server, but nothing needs to be installed there for the client
+features, and the client never needs it on the server.
 
 ## What it actually does
 
-### It puts your threads on the right cores
+### It keeps the render thread's cores to itself
 
-At startup Hydrogen asks the operating system to describe your CPU properly.
-Windows via `GetLogicalProcessorInformationEx`, Linux via sysfs, macOS via
-sysctl. That gives real physical cores, which logical CPUs are hyperthread
-siblings, and on Intel 12th gen and newer, which cores are P and which are E.
+At start-up Hydrogen asks the operating system to describe your CPU properly:
+Windows through `GetLogicalProcessorInformationEx`, Linux through sysfs, macOS
+through sysctl. That gives real physical cores, which logical CPUs are
+hyperthread siblings, which cores are P and which are E on hybrid Intel parts,
+how big each last-level cache is, and the firmware's own ranking of its best
+cores.
 
-The render thread gets pinned to your fastest physical cores. Chunk meshing and
-background pools get everything else. The point is that a chunk build should
-never land on the same core as the frame you're waiting on. How many cores the
-frame path claims scales with what you have: one on a dual core, four on a
-16-core desktop.
+The render thread gets the best physical cores inside one cache domain. On a
+Ryzen X3D chip that means the V-Cache CCD, even though the other one clocks
+higher, because Minecraft cares far more about cache than about a few hundred
+MHz. Everything else is moved off those cores and off their hyperthread
+siblings: the game's worker pool, the integrated server, Sodium's chunk
+builders, other mods' threads. A chunk build should never land on the core
+drawing the frame you're waiting for. How many cores the frame path claims
+scales with what you have, from one on a dual core with hyperthreading to four
+on a big desktop.
+
+On macOS, which has no thread pinning, the same roles become quality of service
+classes, which is how Apple Silicon decides between performance and efficiency
+cores.
 
 ### It asks for clocks when frames get tight
 
-Your monitor decides the target. 144Hz means 6.94ms per frame, 60Hz means
-16.7ms. When frames start overrunning that, Hydrogen switches the Windows power
-plan to High Performance and stops the system dropping into idle states. On
-Linux it writes `performance` to the cpufreq governor. Everything gets put back
-when frames settle down, and again on exit.
+Your monitor sets the target. 144 Hz means 6.94 ms per frame, 60 Hz means
+16.7 ms. When frames start overrunning that, Hydrogen switches Windows to the
+High Performance power plan, or writes `performance` to the Linux cpufreq
+governor, and puts it back when frames settle down. On Windows it also opts the
+game out of EcoQoS power throttling for as long as it runs.
 
-Laptops on battery are left alone by default, because nobody wants a mod
-flattening their battery to gain four frames.
+Two safety nets: a laptop on battery is left alone, and if you unplug while
+boosted, the plan goes back straight away. If the game crashes or gets killed
+while boosted, the next launch notices and restores your old plan or governor,
+unless you changed it yourself in the meantime.
 
-If your machine genuinely can't hit your panel's refresh rate, Hydrogen notices
-during calibration and steps the target down through refresh divisors instead.
-On a 144Hz monitor that means aiming at 72, or 48 if 72 is still out of reach.
-Chasing a number you can't hit just pins the CPU at full clocks forever and
-parks the resolution scaler at its floor for no benefit.
+If your machine can't reach your panel's refresh rate, Hydrogen notices during
+calibration and aims at a refresh divisor instead. On a 144 Hz monitor that
+means 72, or 48 if 72 is still out of reach. Chasing a number you can't hit
+just keeps the CPU at full clocks forever and parks resolution at its floor.
 
 ### It moves garbage collection out of your way
 
-Hydrogen listens to the JVM's GC notifications and pulls collections forward
-into moments you won't notice: standing still, inventory open, game paused. If
-you've swung a sword in the last six seconds, it won't touch anything.
+Hydrogen listens to the JVM's GC notifications and asks for collections in
+moments you won't notice: game paused, inventory open, or standing still. If
+you've swung a sword or taken a hit in the last six seconds, it waits.
 
-How full the heap has to get before a sweep is worth it comes from the
-allocation rate measured during calibration. A heavy modpack burning 500MB a
-second sweeps a lot earlier than a light one.
+The request runs on a background thread, never the render thread. With a
+concurrent collector (ZGC, Shenandoah, or G1 with `ExplicitGCInvokesConcurrent`)
+that means the frame doesn't wait at all. With plain G1 a requested collection
+stops the world, so Hydrogen then only uses paused and menu time, not the
+moments you're standing in the world looking around.
+
+How full the heap has to get first comes from the allocation rate measured
+during calibration. A heavy modpack burning 500 MB a second collects a lot
+earlier than a light one.
 
 ### It scales the world, not the HUD
 
-When the GPU falls behind or video memory fills up, Hydrogen renders the 3D world
-into a smaller buffer and scales it back up. Your HUD, your text, your crosshair
-and every menu are drawn afterwards at full native resolution, so they stay
-sharp. This is the difference between dynamic resolution and just turning your
-monitor down.
+When the GPU falls behind or video memory fills up, Hydrogen renders the 3D
+world into a smaller target and scales it back up. Your HUD, text, crosshair and
+menus are drawn afterwards at full resolution, so they stay sharp.
 
-You set the floor. `drs.minScale=0.70` means it will never go below 70%, no
-matter how bad things get. Auto-tuning picks everything else, including the step
+For the length of the world render the smaller target stands in as the game's
+main target, so every pass vanilla draws, including entity outlines and the
+sky, lands in the scaled image. You set the floor: `drs.minScale=0.70` means it
+never goes below 70%. Everything else is tuned automatically, including the step
 size, which is finer at 4K than at 1080p because each step frees more pixels.
+
+Scaling pauses on its own while Fabulous graphics (improved transparency on
+newer versions) or an Iris shader pack is active, because both draw through
+extra full-size targets of their own.
 
 ### It clears video memory before the driver panics
 
 Total and free VRAM come from the driver through `GL_NVX_gpu_memory_info` on
-NVIDIA or `GL_ATI_meminfo` on AMD. If neither answers, every memory feature
-switches itself off rather than inventing a limit.
+NVIDIA or `GL_ATI_meminfo` on AMD. If neither answers, or the driver reports a
+pool too small to be real (software renderers, many integrated GPUs), every
+memory feature switches itself off instead of inventing a limit.
 
-Thresholds follow the card. A 2GB card starts clearing at 85%, a 12GB card at
-94%. When it fires, single-file textures get released, and the game re-uploads
-them next time they're needed. Block and item atlases are never touched because
-the game can't rebuild those on demand. If the driver reports it's already
-spilling to system RAM, render distance drops too, and comes back once there's
-room.
+Thresholds follow the card. A 2 GB card starts clearing at 85%, a 12 GB card at
+94%. When it fires, textures nobody has drawn for a while get released and the
+game reloads them the next time they're needed. Atlases are never touched, and
+neither are downloaded player skins, since neither can be rebuilt on demand. If
+the driver reports it's already spilling into system RAM, render distance is
+capped for the session and given back one chunk at a time once there's room.
+Your saved render distance is never changed.
 
 ### It stops drawing things smaller than a pixel
 
-For every entity, Hydrogen works out how tall it lands on screen:
+For every entity and block entity, Hydrogen works out how tall it lands on
+screen:
 
 ```
 pixels = size / distance * (viewportHeight / (2 * tan(fov / 2)))
 ```
 
 Under one physical pixel, the draw call never reaches the driver. The viewport
-height it uses is the live one including any active scaling, and the threshold
-follows your OS DPI setting, so 150% Windows scaling needs 1.5 device pixels
-before something counts.
+height is the live one including any scaling, and the threshold follows your OS
+DPI setting, so 150% Windows scaling needs 1.5 device pixels. Size comes from
+the same culling box vanilla uses, so scaled-up display entities stay visible,
+and anything vanilla never culls, like lightning, is left alone.
+
+To be fair about it: one block only drops under a pixel several hundred blocks
+away at 1080p, so in normal play this mostly catches dropped items, arrows and
+other small things far off.
 
 ### It builds chunks where you're looking
 
-Your yaw, pitch and movement direction make a forward vector. Sections inside a
-60 degree cone keep their normal priority. Everything outside gets pushed back,
-so the terrain in front of you finishes first.
+Your camera direction and movement make a forward vector. Sections inside a
+60 degree cone keep their normal priority and everything outside gets pushed
+back, so the terrain in front of you finishes first. Third person works too,
+since the camera is read rather than the player's eyes.
 
-On 1.21.9 and newer this is one redirect of the distance the game's own queue
-already sorts by. The recompile quota and cancellation logic stay exactly as
-Mojang wrote them. On older versions, distant sections behind you also get their
-rebuild postponed during bad frames, and always replayed once things recover.
-Nothing is silently dropped.
+On 1.21.11 and 26.x this is one redirect of the distance the game's own queue
+already sorts by, and Mojang's recompile quota and cancellation logic stay as
+written. Up to 26.1, distant sections behind you also get their rebuild
+postponed during bad frames, and always replayed once things recover.
 
 ### It protects your sound pool
 
-Minecraft's audio backend has 247 channels. Once they're full, every new sound is
-dropped, and vanilla has no idea which ones mattered. A creeper fuse and a distant
-cow compete on equal terms.
+Minecraft's audio backend has 247 channels. Once they're full every new sound is
+dropped, and vanilla has no idea which ones mattered. A creeper fuse and a
+distant cow compete on equal terms.
 
 Hydrogen tiers them. Player and hostile sounds are never culled. Ambience, music
-and weather go first, and only once the pool is actually under pressure, which
-defaults to 75% full. Below that nothing is touched at all. Distance thresholds
-come from your render distance.
+and weather go first, and only once the pool is under pressure, which defaults
+to 75% full. Below that nothing is touched.
 
-### It stops drawing block entities you can't see
+### It skips collision for particles behind your head
 
-Chests, banners, signs and beacons submit a full animated model each. Vanilla
-frustum-culls them per section, but a chest room seen from across the base still
-pays for every lid. The same sub-pixel test used on entities applies here, so
-anything projecting to less than a physical pixel is skipped.
-
-### It skips particle physics behind your head
-
-Every live particle runs a block collision sweep each tick whether or not it's on
-screen. Particles behind the camera get their collision and movement skipped while
-still ageing normally, so they expire exactly on schedule. Only particles behind
-you are culled by default, since something off to the side may be moving into
-view.
+Every live particle runs a block collision sweep each tick, on screen or not.
+For particles behind the camera that sweep is skipped, but they keep moving and
+ageing normally, so turning around shows them where they should be.
 
 ### It can thin distant mob AI and idle hoppers
 
-Two server-side options, both off by default because they change simulation
-rather than presentation.
+Two options that also work on servers, both off by default because they change
+simulation rather than presentation.
 
-Passive mobs beyond 48 blocks with no player nearby can run their goal selector
-one tick in four instead of every tick. Hostile mobs, anything with a target and
-anything being ridden are never touched, and movement and collision still run
-every tick so nothing falls through the world. This thins AI rather than
-disabling it, because mobs frozen mid-path break farms and the saving between
-"one in four" and "never" isn't worth that.
+Passive mobs beyond 48 blocks with no player nearby can run their AI one tick in
+four. Hostile mobs, anything with a target, anything riding or ridden, and
+villagers and wandering traders are never touched, since iron farms and trading
+halls depend on them. Movement and collision still run every tick.
 
-Empty hoppers can have their pickup scan thinned the same way. The skip only
-happens when the hopper is empty and has no cooldown left to burn, so vanilla
-transfer timing is untouched. Worst case an item waits a fifth of a second longer
-against a transfer cooldown of eight ticks.
+Empty hoppers can have their search for dropped items thinned the same way.
+Pulling from a chest above, pushing, cooldowns and the tick ordering that hopper
+clocks rely on are all left to vanilla. The only difference is that an item
+lying on top of an empty hopper can wait up to three extra ticks.
 
 Turn them on with `ai.throttle.enabled=true` and `hopper.throttle.enabled=true`.
 
-## The five second benchmarkThe first time you load a world, Hydrogen throws away one second of loading
-frames and then watches the next five with every adaptive feature switched off.
-It records frame time percentiles, jitter, allocation rate and video memory
-growth, then derives its thresholds from those. Nothing is drawn while it runs
-and no setting changes. It runs again if you change resolution or move to a
-different monitor.
+## The calibration pass
 
-You'll see two lines in your log:
+When you join a world, Hydrogen waits for the loading screen to close, skips two
+seconds while the first chunks mesh, then watches five seconds of play with
+every adaptive feature held still. Time spent with a menu open doesn't count. It
+records frame time percentiles, jitter, allocation rate and video memory growth,
+then derives its thresholds from those. Nothing is drawn and no setting changes
+while it runs. It runs again if you change resolution or move to a monitor with
+a different refresh rate.
+
+You'll see a few lines in your log:
 
 ```
 Hydrogen: NVIDIA GeForce GT 1030 (2.0 GB via NVX_gpu_memory_info) | 2560x1440 @ 144Hz
@@ -176,121 +231,156 @@ Hydrogen: baseline p50 7.72ms p95 19.07ms jitter 7.46ms churn 569MB/s headroom 0
 Hydrogen: tuned to target 13.89ms stall 18.75ms | drs 0.70-1.00 step 0.040 | vram evict 85%
 ```
 
-That's a real GT 1030 at 1440p. Headroom of 0.36 says it's nowhere near 144Hz,
-so the target moved to 72 and resolution scaling took over from there.
+That's a GT 1030 at 1440p. Headroom of 0.36 says 144 Hz was never going to
+happen, so the target moved to 72 and resolution scaling took it from there.
 
 ## Config
 
-`config/hydrogen.properties`, written on first launch. Nearly everything says
+`config/hydrogen.properties` is written on first launch. Nearly everything says
 `auto`, which means Hydrogen works it out. Put a number in and that one value is
 pinned while the rest keep tuning themselves.
 
 The ones people actually change:
 
 ```properties
-drs.minScale=0.70                       # never scale below this
-target.frameTimeMs=auto                 # set 16.7 to just target 60fps
-cpu.governor.allowPowerPlanSwitch=auto  # auto means AC only, never on battery
+# Never scale the world below this
+drs.minScale=0.70
+# Set 16.7 to simply target 60 fps
+target.frameTimeMs=auto
+# auto = allowed on AC power, never on battery
+cpu.governor.allowPowerPlanSwitch=auto
 gc.enabled=true
-audio.pressureAt=0.75                   # pool fill before sound culling starts
+# Pool fill before sound culling starts
+audio.pressureAt=0.75
 particle.cullPhysics=true
-ai.throttle.enabled=false               # opt-in, changes mob behaviour
-hopper.throttle.enabled=false           # opt-in, adds slight pickup delay
-log.verbose=false                       # log every tuning decision
+# Opt-in, these change mob and hopper behaviour
+ai.throttle.enabled=false
+hopper.throttle.enabled=false
+# Log every tuning decision
+log.verbose=false
 ```
 
-## Two things this deliberately does not do
+A comment after a value on the same line works too. When a new version adds
+settings, they're appended and your values are kept. Hydrogen never writes a
+change of its own into this file: if a feature switches itself off after an
+error, that only lasts until you restart.
 
-**GUI item flat lighting.** The usual pitch is that switching inventory items to
-flat lighting cuts their render cost. It doesn't. `setupForFlatItems` sets two
-directional light vectors as uniforms; the same fragment shader runs either way,
-so you'd change how every 3D item looks in your inventory for no measurable gain.
-The real cost of GUI item rendering is draw call count, which is what
-ImmediatelyFast already solves properly.
+## Two things it deliberately does not do
 
-**Object pooling for Vec3 and SectionPos.** Both are immutable and both escape
-into vanilla code everywhere: stored in entity fields, put in packets, used as
-HashMap keys. Pooling requires knowing when the last reference dies, and there is
-no way to know that for objects handed to code you don't control. Recycling a
-live `Vec3` corrupts entity positions silently; recycling a `SectionPos` being
-used as a map key corrupts the map. On top of that, allocating a 32-byte object
-in a TLAB is a pointer bump, escape analysis often removes it entirely, and a
-young-gen collector only pays for objects that survive. Pool bookkeeping would
-very likely be slower as well as unsafe. Hydrogen measures your allocation rate
-and schedules collections around it instead, which is the part that actually
-helps.
+**Flat lighting for GUI items.** The usual pitch is that switching inventory
+items to flat lighting cuts their render cost. It doesn't. `setupForFlatItems`
+sets two light vectors as uniforms and the same shader runs either way, so you'd
+change how every 3D item looks for no measurable gain. The real cost of GUI item
+rendering is draw call count, which ImmediatelyFast already handles properly.
+
+**Object pooling for `Vec3` and `SectionPos`.** Both are immutable and both end
+up all over vanilla code: entity fields, packets, hash map keys. Pooling needs to
+know when the last reference dies, and there's no way to know that for objects
+handed to code you don't control. Recycling a live `Vec3` silently corrupts an
+entity position, and recycling a `SectionPos` used as a map key corrupts the map.
+On top of that, allocating a 32 byte object is a pointer bump, escape analysis
+often removes it entirely, and a young generation collection only pays for what
+survives. Hydrogen measures your allocation rate and schedules collections
+around it instead.
 
 ## Running with other mods
 
-Hydrogen is built to sit underneath everything else. It never replaces a
-renderer, a scheduler or a shader.
+Hydrogen sits underneath everything else. It never replaces a renderer, a
+scheduler or a shader.
 
-With **Sodium** installed, the vanilla chunk ordering hooks switch themselves off
-because Sodium has its own scheduler. Everything else still applies. With
-**VulkanMod**, resolution scaling switches off because there's no GL framebuffer
-to redirect, but CPU tuning, GC timing and sub-pixel culling carry on. **Iris**
-needs no special handling. **C2ME** doesn't overlap at all, since it threads
-server-side chunk generation while Hydrogen reorders client-side meshing.
+With **Sodium** (or Embeddium and Rubidium on Forge), the vanilla chunk ordering
+hooks switch themselves off because Sodium has its own scheduler. Everything
+else still applies, and Sodium's builder threads are kept off the render cores
+like any other worker. With **VulkanMod**, resolution scaling switches off but
+CPU, GC and culling carry on. **Iris** and **Oculus** work as is; resolution
+scaling pauses while a shader pack is on. **C2ME** doesn't overlap at all, since
+it threads server-side chunk generation while Hydrogen reorders client-side
+meshing.
 
 ## When things don't work
 
-None of this is required for the game to run. Every OS call is best effort and
-returns false instead of throwing.
+None of this is needed for the game to run. Every OS call is best effort and
+returns false instead of throwing, and anything that fails is logged once.
 
-If thread pinning is denied, or you have more than 64 logical CPUs, it falls back
-to normal JVM thread priorities. If the power governor isn't writable, which is
-the normal case on Linux without root, it holds one spare core out of deep sleep
-instead, which lifts clocks without needing privileges. No VRAM extension means
-memory features stay off. `-XX:+DisableExplicitGC` in your launch arguments means
-GC coordination drops to reporting only, so remove it if you want that feature.
-On macOS there's no thread affinity API at all, so pinning is skipped and only
-priorities apply, though topology detection still works.
+If thread pinning is denied, or you have more than 64 logical CPUs on Windows,
+Hydrogen falls back to normal JVM thread priorities. If the power governor isn't
+writable, which is normal on Linux without root, it holds one spare core out of
+deep sleep instead, which lifts clocks without needing privileges. No VRAM
+extension means memory features stay off. `-XX:+DisableExplicitGC` in your
+launch arguments turns GC coordination into reporting only, so remove it if you
+want that feature.
 
-Anything that fails is logged once, not once per frame.
+A dedicated server has no LWJGL, which every native call goes through, so there
+Hydrogen logs one line and uses JVM thread priorities. The two simulation
+options work the same on a server as in single player.
 
 ## Known limits
 
-Resolution scaling on 1.21.9+ and 26.x runs on the new Blaze3D `GpuDevice` API,
-which is still moving between snapshots. The code is there but it's opt-in behind
-`drs.allowNewBlaze3d=true`. On 1.20.x and 1.21.1 the OpenGL path is on by
-default. If you try the new one, please open an issue either way.
+Resolution scaling on 1.21.11 and 26.x runs through Mojang's newer render
+abstraction, which still changes between releases, so it's opt-in there behind
+`drs.allowNewBlaze3d=true`. It has been checked in game on 1.21.11, 26.2 and
+26.3 with OpenGL, but only on a software renderer so far. On 1.20.x and 1.21.1
+the OpenGL path is on by default. If you try the new one on real hardware,
+please open an issue either way.
 
-26.x reworked how sections are invalidated and no longer exposes a public
-per-section dirty call, so chunk deferral isn't available there. Cone
-prioritisation still is.
+From 26.2, vanilla no longer exposes a per-section rebuild call, so postponing
+rebuilds behind you is not available there. Cone ordering still is.
 
-Fabulous graphics uses extra full-resolution render targets during the world
-pass, and resolution scaling doesn't mix with those. Leave scaling off if you use
-Fabulous.
+26.3 can render through Vulkan. Memory readings come from OpenGL extensions, so
+on the Vulkan backend the VRAM features stay off; everything else works.
 
 AMD's `ATI_meminfo` reports free memory but never total, so capacity is taken
 from the first reading before the world loads.
 
-There's no in-game settings screen yet. GUI code changes a lot between these four
-Minecraft versions and it would have doubled the surface area for something
-cosmetic.
+There's no in-game settings screen yet, only the config file.
 
 ## Building
 
 ```bash
-./gradlew build          # every branch
-./gradlew :mc1_21_1:build
-./gradlew collectJars    # all four jars into build/dist
+./gradlew :core:test                        # unit tests, no game needed
+./gradlew collectJars                       # every jar into build/dist
+./gradlew collectJars -Ploader=fabric       # one loader
+./gradlew collectJars -Pmc=26.3             # one Minecraft branch
+./gradlew :neoforge-1.21.1:build            # one jar
+./gradlew updateDist                        # refresh the jars in dist/<loader>/
 ```
 
-You need JDK 25. It compiles the older branches with `--release 17` and `21`.
+You need JDK 25 to run Gradle. Each branch compiles with its own toolchain (17,
+21 or 25); Gradle finds installed JDKs and downloads missing ones.
+
+<details>
+<summary><b>How the source is laid out</b></summary>
 
 ```
-core/       plain Java. No Minecraft, no dependencies. Policy and maths.
-mcshared/   LWJGL and Fabric Loader only. Native calls, probes, entrypoints.
-mccommon/   Minecraft APIs identical on all four branches.
-mclegacy/   1.20.1 + 1.21.1   (OpenGL render targets)
-mcmodern/   1.21.11 + 26.2    (Blaze3D GpuDevice)
-versions/   whatever is left that genuinely differs
+core/                 plain Java. Policy, maths and the platform interface. Unit tested.
+mcshared/             LWJGL only: native calls, the GPU probe, the boot path.
+mcwindow/glfw|sdl/    display probe: GLFW up to 26.2, SDL3 on 26.3
+mccommon/             Minecraft code that is identical on every version.
+mclegacy/             1.20.1 and 1.21.1   (OpenGL render targets)
+mcmodern/             1.21.11 to 26.3     (Blaze3D and renderpearl)
+loaders/<loader>/     entry point, loader bridge and metadata for each loader
+versions/<mc>/common/ the Minecraft code that still differs per version
+versions/<mc>/<loader>/   one Gradle project per jar
+gradle/               the shared build scripts, one per loader
 ```
 
-Hydrogen bundles no libraries. Native calls go through LWJGL's loader, which the
-game already ships, which is why the jar is about 130KB.
+Every loader jar compiles the same sources. The only loader-specific code is a
+small entry class and a bridge that answers three questions: where the config
+folder is, which other mods are loaded, and whether this is a client. All of
+Hydrogen's hooks are mixins, which every loader supports, so there is no event
+API to port.
+
+| Loader | Build tool |
+|---|---|
+| Fabric and Quilt | Fabric Loom |
+| NeoForge | ModDevGradle |
+| Forge 1.21 and later | ForgeGradle 7 |
+| Forge 1.20.1 | ModDevGradle (legacy Forge) |
+
+</details>
+
+Hydrogen bundles no libraries. Native calls go through LWJGL, which the game
+already ships, so each jar is about 180 KB.
 
 ## Licence
 

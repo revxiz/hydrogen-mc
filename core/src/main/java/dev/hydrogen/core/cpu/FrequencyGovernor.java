@@ -10,6 +10,10 @@ import dev.hydrogen.core.platform.NativePlatform;
  * Watches frame pacing against the display's own target and asks the OS governor
  * for peak clocks while frames overrun it. A dwell time derived from the target
  * frame time stops the power plan from flapping.
+ *
+ * A boost that reached the OS is always released through the OS again, even if
+ * the switch has since become disallowed (a laptop unplugged mid-session), and
+ * unplugging releases it immediately rather than at the next calm period.
  */
 public final class FrequencyGovernor {
 	private final NativePlatform platform;
@@ -18,12 +22,19 @@ public final class FrequencyGovernor {
 	private SpinHint spinHint;
 
 	private boolean boosted;
+	private boolean planActive;
+	private boolean spinActive;
 	private long lastSwitchMs;
 	private long boostedMs;
 	private long boostEnteredMs;
 	private int switches;
 	private boolean governorReachable = true;
 	private boolean usingSpinFallback;
+
+	// Power source changes rarely; asking the OS every control tick meant a sysfs
+	// directory walk on Linux twenty times a second on the render thread.
+	private boolean batteryCached;
+	private long batteryCheckedMs;
 
 	public FrequencyGovernor(NativePlatform platform, HConfig config, Budget budget) {
 		this.platform = platform;
@@ -32,7 +43,21 @@ public final class FrequencyGovernor {
 	}
 
 	public void update(FrameStats stats, long nowMs) {
-		if (!config.bool("cpu.governor.enabled") || !stats.usable()) {
+		if (!config.bool("cpu.governor.enabled")) {
+			if (boosted) {
+				apply(false, nowMs);
+			}
+
+			return;
+		}
+
+		// Unplugged while the power plan was switched: give it back now.
+		if (planActive && !planSwitchAllowed()) {
+			apply(false, nowMs);
+			return;
+		}
+
+		if (!stats.usable()) {
 			return;
 		}
 
@@ -57,7 +82,18 @@ public final class FrequencyGovernor {
 
 	/** auto resolves to "yes on AC power, never on battery". */
 	private boolean planSwitchAllowed() {
-		return config.boolAuto("cpu.governor.allowPowerPlanSwitch", !platform.onBattery());
+		return config.boolAuto("cpu.governor.allowPowerPlanSwitch", !onBattery());
+	}
+
+	private boolean onBattery() {
+		long now = System.currentTimeMillis();
+
+		if (batteryCheckedMs == 0L || now - batteryCheckedMs > 10_000L) {
+			batteryCheckedMs = now;
+			batteryCached = platform.onBattery();
+		}
+
+		return batteryCached;
 	}
 
 	private void apply(boolean on, long nowMs) {
@@ -65,17 +101,31 @@ public final class FrequencyGovernor {
 			return;
 		}
 
-		boolean reached = planSwitchAllowed() && platform.requestBoost(on);
+		if (on) {
+			boolean reached = planSwitchAllowed() && platform.requestBoost(true);
+			planActive = reached;
 
-		if (!reached && governorReachable && planSwitchAllowed()) {
-			governorReachable = false;
-			HLog.once("gov-denied",
-					"Hydrogen: OS power governor not writable, using a C-state hint thread instead");
-		}
+			if (!reached && governorReachable && planSwitchAllowed()) {
+				governorReachable = false;
+				HLog.once("gov-denied",
+						"Hydrogen: OS power governor not writable, using a C-state hint thread instead");
+			}
 
-		if (!reached && config.bool("cpu.governor.spinHintFallback")) {
-			usingSpinFallback = true;
-			spin().set(on);
+			if (!reached && config.bool("cpu.governor.spinHintFallback")) {
+				usingSpinFallback = true;
+				spinActive = true;
+				spin().set(true);
+			}
+		} else {
+			if (planActive) {
+				platform.requestBoost(false);
+				planActive = false;
+			}
+
+			if (spinActive) {
+				spin().set(false);
+				spinActive = false;
+			}
 		}
 
 		boosted = on;
@@ -90,6 +140,13 @@ public final class FrequencyGovernor {
 		}
 	}
 
+	/** Drops any boost straight away, for example when the player leaves the world. */
+	public void release(long nowMs) {
+		if (boosted) {
+			apply(false, nowMs);
+		}
+	}
+
 	private SpinHint spin() {
 		if (spinHint == null) {
 			spinHint = new SpinHint(platform);
@@ -99,7 +156,9 @@ public final class FrequencyGovernor {
 	}
 
 	public void shutdown() {
-		apply(false, System.currentTimeMillis());
+		if (boosted) {
+			apply(false, System.currentTimeMillis());
+		}
 
 		if (spinHint != null) {
 			spinHint.close();
