@@ -121,12 +121,8 @@ public final class Hydrogen {
 
 		binder.buildPlan(dedicatedServer);
 
+		// When native calls are missing, the platform layer has already said why.
 		HLog.LOG.info("Hydrogen on {} | {}", platform.name(), hardware.cpu().describe());
-
-		if (!platform.available()) {
-			HLog.once("no-native",
-					"Hydrogen: native scheduling calls unavailable, using JVM-level priorities only");
-		}
 
 		if (config.bool("cpu.priority.native")) {
 			platform.setProcessPriority(NativePlatform.PRIORITY_HIGH);
@@ -228,6 +224,10 @@ public final class Hydrogen {
 		if (Math.abs(resolution.scale() - appliedScale) > 1.0E-4D) {
 			appliedScale = resolution.scale();
 			culler.updateProjection(hardware.display(), appliedScale, hardware.fovDegrees());
+
+			if (config.bool("log.verbose")) {
+				HLog.LOG.info("Hydrogen: world scale {}% ({})", Math.round(appliedScale * 100.0D), resolution.reason());
+			}
 		}
 
 		EvictionController.Action action = eviction.decide(vram, now);

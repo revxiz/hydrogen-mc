@@ -207,8 +207,12 @@ public final class CoreBinder {
 				}
 			} else if (!hint(role)) {
 				jvmOnly.incrementAndGet();
-				HLog.once("bind-fallback",
-						"Hydrogen: thread pinning unavailable, falling back to JVM thread priorities");
+
+				// Without native calls at all this was already explained at start-up.
+				if (platform.available()) {
+					HLog.once("bind-fallback",
+							"Hydrogen: thread pinning was refused, falling back to JVM thread priorities");
+				}
 			}
 		} catch (Throwable t) {
 			// Pinning is an optimisation; never let it break a game thread.

@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -35,6 +36,9 @@ import java.util.stream.Stream;
  */
 final class LinuxPlatform implements NativePlatform {
 	private static final Path CPU_ROOT = Path.of("/sys/devices/system/cpu");
+	private static final Pattern GOVERNOR_FILE = Pattern.compile(
+			"/sys/devices/system/cpu/(cpu\\d{1,5}/cpufreq|cpufreq/policy\\d{1,5})/scaling_governor");
+	private static final Pattern GOVERNOR_NAME = Pattern.compile("[a-z0-9_]{1,32}");
 	private static final int CPU_SET_BYTES = 128; // cpu_set_t covers 1024 CPUs.
 
 	private final long pSchedSetAffinity;
@@ -486,12 +490,21 @@ final class LinuxPlatform implements NativePlatform {
 				continue;
 			}
 
-			Path p = Path.of(key.substring("governor.".length()));
+			String path = key.substring("governor.".length());
+			String previous = props.getProperty(key, "").trim();
+
+			// The file lives in the user's config folder, so nothing in it is trusted:
+			// only real governor files are written, and only a plain governor name.
+			if (!GOVERNOR_FILE.matcher(path).matches() || !GOVERNOR_NAME.matcher(previous).matches()) {
+				continue;
+			}
+
+			Path p = Path.of(path);
 
 			// Only undo our own change; if someone set it since, leave theirs alone.
-			if (p.startsWith(CPU_ROOT) && "performance".equals(readText(p).trim())) {
+			if ("performance".equals(readText(p).trim())) {
 				try {
-					Files.writeString(p, props.getProperty(key));
+					Files.writeString(p, previous);
 					restored++;
 				} catch (IOException | RuntimeException ignored) {
 					// Still not writable; nothing else to try.

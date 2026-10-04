@@ -12,7 +12,7 @@
 [![NeoForge](https://img.shields.io/badge/NeoForge-supported-f16436?style=flat-square)](#download)
 <br>
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1_to_26.3-62b47a?style=flat-square)](#download)
-[![Build](https://img.shields.io/github/actions/workflow/status/revxiz/hydrogen-mc/build.yml?branch=main&style=flat-square&label=build)](../../actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/revxiz/hydrogen-mc/build.yml?branch=main&style=flat-square&label=build)](https://github.com/revxiz/hydrogen-mc/actions/workflows/build.yml)
 [![Licence](https://img.shields.io/badge/licence-MIT-blue?style=flat-square)](LICENSE)
 
 </div>
@@ -310,12 +310,18 @@ extension means memory features stay off. `-XX:+DisableExplicitGC` in your
 launch arguments turns GC coordination into reporting only, so remove it if you
 want that feature.
 
+A dedicated server has no LWJGL, which every native call goes through, so there
+Hydrogen logs one line and uses JVM thread priorities. The two simulation
+options work the same on a server as in single player.
+
 ## Known limits
 
 Resolution scaling on 1.21.11 and 26.x runs through Mojang's newer render
 abstraction, which still changes between releases, so it's opt-in there behind
-`drs.allowNewBlaze3d=true`. On 1.20.x and 1.21.1 the OpenGL path is on by
-default. If you try the new one, please open an issue either way.
+`drs.allowNewBlaze3d=true`. It has been checked in game on 1.21.11, 26.2 and
+26.3 with OpenGL, but only on a software renderer so far. On 1.20.x and 1.21.1
+the OpenGL path is on by default. If you try the new one on real hardware,
+please open an issue either way.
 
 From 26.2, vanilla no longer exposes a per-section rebuild call, so postponing
 rebuilds behind you is not available there. Cone ordering still is.

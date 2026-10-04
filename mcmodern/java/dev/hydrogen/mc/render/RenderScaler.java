@@ -74,6 +74,7 @@ public final class RenderScaler {
 
 		try {
 			RenderTarget main = ModernRenderBridge.mainTarget(mc);
+			real = main;
 			int w = Math.max(1, (int) Math.round(main.width * scale));
 			int hgt = Math.max(1, (int) Math.round(main.height * scale));
 
@@ -87,9 +88,9 @@ public final class RenderScaler {
 				targetHeight = hgt;
 			}
 
-			real = main;
 			ModernRenderBridge.setMainTarget(mc, target);
 			redirecting = true;
+			HLog.once("drs-active", "Hydrogen: resolution scaling engaged, world drawn at " + w + "x" + hgt);
 		} catch (Throwable t) {
 			fail(mc, t);
 		}
@@ -115,11 +116,16 @@ public final class RenderScaler {
 	 * Called at the start of every frame, so a failure costs at most one frame.
 	 */
 	public static void ensureRestored(Minecraft mc) {
-		if (!redirecting) {
+		if (redirecting) {
+			redirecting = false;
+			restoreReal(mc);
+		}
+	}
+
+	private static void restoreReal(Minecraft mc) {
+		if (real == null) {
 			return;
 		}
-
-		redirecting = false;
 
 		try {
 			ModernRenderBridge.setMainTarget(mc, real);
@@ -128,10 +134,14 @@ public final class RenderScaler {
 		}
 	}
 
+	/**
+	 * Always puts the real target back, even when the failure came from the
+	 * upscale in {@link #end} after the redirect flag was already cleared.
+	 */
 	private static void fail(Minecraft mc, Throwable t) {
 		broken = true;
-		ensureRestored(mc);
 		redirecting = false;
+		restoreReal(mc);
 		HLog.warnOnce("drs", "Hydrogen: resolution scaling failed, staying at native", t);
 	}
 

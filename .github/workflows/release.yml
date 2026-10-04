@@ -86,10 +86,10 @@ jobs:
 
             | Minecraft | Fabric | Quilt | Forge | NeoForge |
             |---|---|---|---|---|
-            | 1.20.1 | yes | yes | yes | use the Forge jar |
-            | 1.21.1 | yes | yes | yes | yes |
+            | 1.20 to 1.20.4 | yes | yes | 1.20.1 | 1.20.1, use the Forge jar |
+            | 1.21 and 1.21.1 | yes | yes | 1.21.1 | 1.21.1 |
             | 1.21.11 | yes | yes | yes | yes |
-            | 26.1.2 | yes | yes | yes | yes |
+            | 26.1 to 26.1.2 | yes | yes | 26.1.2 | 26.1.2 |
             | 26.2 | yes | yes | yes | yes |
             | 26.3 | yes | yes | yes | yes (beta loader) |
 
